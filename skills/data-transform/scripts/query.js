@@ -135,10 +135,11 @@ function processKey(obj, key, rest) {
  * - slice `start:end` to take an array slice (both start and end optional; negative indices supported)
  * - quoted property name (`'prop'` or `"prop"`) to access an object property
  *
- * @param {*} obj - The current object or array to query.
- * @param {string} selector - The selector string inside brackets.
- * @param {string} rest - The remaining path to resolve after this selector.
- * @returns {Array} An array of values matched by the selector and resolved with the remaining path.
+ * `@param` {*} obj - The current object or array to query.
+ * `@param` {string} selector - The selector string inside brackets.
+ * `@param` {string} rest - The remaining path to resolve after this selector.
+ * `@returns` {Array} An array of values matched by the selector and resolved with the remaining path.
+ */
 function processSelector(obj, selector, rest) {
   if (obj === null || obj === undefined) return [];
 
