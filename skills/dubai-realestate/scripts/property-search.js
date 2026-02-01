@@ -103,6 +103,30 @@ const SAMPLE_PROPERTIES = [
   { id: 'PROP_010', area: 'Business Bay', subArea: 'Executive Towers', type: 'apartment', beds: 2, baths: 2, sqft: 1300, price: 1450000, status: 'available', features: ['canal-view', 'metro-access', 'furnished'] }
 ];
 
+/**
+ * Parse CLI arguments into a structured search filter object for property queries.
+ *
+ * @returns {Object} A filters object with parsed CLI options:
+ *  - {string|null} area - Normalized area name or raw input.
+ *  - {string|null} subArea - Sub-area name.
+ *  - {string|null} type - Property type (lowercased where applicable).
+ *  - {number|null} beds - Exact number of bedrooms.
+ *  - {number|null} bedsMin - Minimum bedrooms.
+ *  - {number|null} bedsMax - Maximum bedrooms.
+ *  - {number|null} baths - Minimum number of bathrooms.
+ *  - {number|null} minPrice - Minimum price.
+ *  - {number|null} maxPrice - Maximum price.
+ *  - {number|null} minSqft - Minimum square feet.
+ *  - {number|null} maxSqft - Maximum square feet.
+ *  - {string[]} features - Array of requested feature keywords (lowercased).
+ *  - {string} status - Property status filter (default: 'available').
+ *  - {number} limit - Maximum number of results to return (default: 20).
+ *  - {string} sortBy - Field to sort by (default: 'price').
+ *  - {string} sortOrder - Sort direction: 'asc' or 'desc' (default: 'asc').
+ *  - {boolean} export - Whether to export results to a file.
+ *  - {string|null} output - Output file path when exporting.
+ *  - {string} format - Export format: 'json' or 'csv' (default: 'json').
+ */
 function parseArgs() {
   const result = {
     area: null,
@@ -210,6 +234,12 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Normalize an area identifier to the canonical area name defined in DUBAI_AREAS.
+ *
+ * @param {string} input - Area identifier; may be an area key, an alias, or the display name (case-insensitive).
+ * @returns {string|null} The canonical area name if a match is found, the original `input` string if no match exists, or `null` when `input` is falsy.
+ */
 function normalizeArea(input) {
   if (!input) return null;
   const normalized = input.toLowerCase().trim();
@@ -223,6 +253,11 @@ function normalizeArea(input) {
   return input;
 }
 
+/**
+ * Retrieve metadata for a Dubai area by its canonical name.
+ * @param {string} areaName - Canonical area name to look up (must match the area's `name`).
+ * @returns {{key: string, name: string, aliases?: string[], type?: string, avgPricePerSqft?: number, rentalYield?: number, subAreas?: string[], amenities?: string[]} | null} Area metadata including its map `key` when found, or `null` if no matching area exists.
+ */
 function getAreaInfo(areaName) {
   for (const [key, data] of Object.entries(DUBAI_AREAS)) {
     if (data.name === areaName) {
@@ -232,6 +267,10 @@ function getAreaInfo(areaName) {
   return null;
 }
 
+/**
+ * Load property records from properties.json on disk if found, otherwise return the embedded sample dataset.
+ * @returns {Array<Object>} An array of property objects loaded from disk when a properties.json file is present; otherwise the in-memory SAMPLE_PROPERTIES array.
+ */
 function loadProperties() {
   // Try to load from file
   const defaultPaths = [
@@ -248,6 +287,29 @@ function loadProperties() {
   return SAMPLE_PROPERTIES;
 }
 
+/**
+ * Filter a list of property objects according to the provided search filters.
+ *
+ * Filters are applied as exact or range checks on area (normalized), sub-area, type,
+ * beds (exact or min/max), baths (minimum), price (min/max), size in sqft (min/max),
+ * required features (case-insensitive substring match for each feature), and status.
+ *
+ * @param {Array<Object>} properties - Array of property objects to filter.
+ * @param {Object} filters - Search filters. Expected keys include:
+ *   - {string|null} area
+ *   - {string|null} subArea
+ *   - {string|null} type
+ *   - {number|null} beds
+ *   - {number|null} bedsMin
+ *   - {number|null} bedsMax
+ *   - {number|null} baths
+ *   - {number|null} minPrice
+ *   - {number|null} maxPrice
+ *   - {number|null} minSqft
+ *   - {number|null} maxSqft
+ *   - {Array<string>} features - required features; each feature must match a property feature as a case-insensitive substring
+ *   - {string|null} status
+ * @returns {Array<Object>} The subset of `properties` that satisfy all specified filters.
 function searchProperties(properties, filters) {
   return properties.filter(prop => {
     // Area filter
@@ -293,6 +355,14 @@ function searchProperties(properties, filters) {
   });
 }
 
+/**
+ * Sorts a list of property objects by the specified field and order.
+ *
+ * @param {Array<Object>} properties - Array of property objects to sort.
+ * @param {string} sortBy - Field to sort by: 'price', 'beds', 'sqft', or 'price-per-sqft'.
+ * @param {string} sortOrder - Sort direction: 'asc' for ascending or 'desc' for descending.
+ * @returns {Array<Object>} A new array containing the properties sorted according to the provided field and order.
+ */
 function sortProperties(properties, sortBy, sortOrder) {
   return [...properties].sort((a, b) => {
     let comparison = 0;
@@ -318,6 +388,19 @@ function sortProperties(properties, sortBy, sortOrder) {
   });
 }
 
+/**
+ * Enhances a property object with derived pricing, rent estimates, rental-yield info, market comparison, and area metadata.
+ * @param {Object} prop - Property record containing at least `price` (number, AED), `sqft` (number) and `area` (string); other fields are preserved.
+ * @returns {Object} The original property extended with:
+ * - `priceFormatted` (string): price in millions with "M AED".
+ * - `pricePerSqft` (number): rounded AED per square foot.
+ * - `pricePerSqftFormatted` (string): human-readable AED/sqft.
+ * - `estimatedMonthlyRent` (number): estimated monthly rent in AED.
+ * - `estimatedRentFormatted` (string): formatted monthly rent (e.g., "X.XK AED/month").
+ * - `rentalYield` (number): area rental yield percentage (falls back to 5).
+ * - `marketComparison` (string|null): percent difference vs area average (e.g., "+10% vs market avg") or null if area data missing.
+ * - `areaInfo` (object|null): area metadata (`type`, `avgPricePerSqft`, `amenities`) or null if not available.
+ */
 function enrichProperty(prop) {
   const areaInfo = getAreaInfo(prop.area);
   const pricePerSqft = Math.round(prop.price / prop.sqft);
@@ -341,6 +424,11 @@ function enrichProperty(prop) {
   };
 }
 
+/**
+ * Entry point that runs the property search CLI: parses arguments, executes filtering, sorting, enrichment and summary generation, then prints the JSON result and optionally exports it to a file.
+ *
+ * Performs help handling (prints usage and exits), loads property data, applies filters, sorts and limits results, enriches properties with market and area data, assembles a structured output (timestamp, query, areaInfo, summary, properties), writes JSON or CSV to disk when export is requested, and writes errors as JSON before exiting with a non-zero code on failure.
+ */
 function main() {
   const filters = parseArgs();
 
