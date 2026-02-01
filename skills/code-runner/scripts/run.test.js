@@ -126,7 +126,7 @@ describe('run.js', () => {
     const code = 'while(true) {}';
     const result = await runScript([code, '--lang', 'js', '--timeout', '500'], { timeout: 2000 });
 
-    expect(result.code).toBe(0);
+    expect(result.code).toBe(1);
     const output = JSON.parse(result.stdout);
     expect(output.success).toBe(false);
     expect(output.timedOut).toBe(true);
@@ -281,7 +281,7 @@ describe('run.js', () => {
     const code = 'while(true) {}';
     const result = await runScript([code, '--lang', 'js', '--timeout', '500'], { timeout: 2000 });
 
-    expect(result.code).toBe(0);
+    expect(result.code).toBe(1);
     const output = JSON.parse(result.stdout);
     expect(output.exitCode).toBe(null);
     expect(output.timedOut).toBe(true);

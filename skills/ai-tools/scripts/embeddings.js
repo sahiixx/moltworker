@@ -8,19 +8,18 @@
 const fs = require('fs');
 const path = require('path');
 
-const args = process.argv.slice(2);
-
 /**
  * Parse command-line arguments into an options object for embedding generation.
  *
  * Recognizes `--model`, `--dimensions`, and `--output`; the first non-option argument is used as the input text.
+ * @param {string[]} args - CLI arguments
  * @returns {{text: string, model: string, dimensions: number, output: string|null}} An object containing:
  *  - `text`: the input text to embed (empty string if not provided),
  *  - `model`: embedding model name (default `"text-embedding-3-small"`),
  *  - `dimensions`: requested embedding dimensionality (default `1536`),
  *  - `output`: optional file path to save the result, or `null` if not set.
  */
-function parseArgs() {
+function parseArgs(args) {
   const result = {
     text: '',
     model: 'text-embedding-3-small',
@@ -97,7 +96,8 @@ async function generateEmbeddings(text, model, dimensions) {
  * Parses argv for text, model, dimensions, and output options; if no text is provided prints usage and exits with code 1. Calls generateEmbeddings with the parsed options, and on success either writes the complete result as pretty JSON to the specified output file or prints a truncated embedding preview (first five values plus an indicator of total length). On failure logs a JSON error and exits with code 1.
  */
 async function main() {
-  const options = parseArgs();
+  const args = process.argv.slice(2);
+  const options = parseArgs(args);
 
   if (!options.text) {
     console.error('Usage: node embeddings.js <text> [OPTIONS]');
@@ -134,4 +134,8 @@ async function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { generateEmbeddings, main };

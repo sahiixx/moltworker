@@ -5,31 +5,27 @@
  * Usage: node sentiment.js <text>
  */
 
-const args = process.argv.slice(2);
-
 /**
  * Parse command-line arguments into an input text string and a model name.
- *
- * @returns {{text: string, model: string}} An object with:
- *  - `text`: the positional input text (empty string if none provided).
- *  - `model`: the model name (defaults to "claude-3-5-haiku-20241022" if not specified via `--model`).
+ * @param {string[]} args - CLI arguments
+ * @returns {{text: string, model: string}} An object with text and model.
  */
-function parseArgs() {
+function parseArgs(args) {
   const result = {
     text: '',
     model: 'claude-3-5-haiku-20241022'
   };
 
+  const positional = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--model' && args[i + 1]) {
       result.model = args[i + 1];
       i++;
     } else if (!args[i].startsWith('--')) {
-      result.text = args.slice(i).join(' ');
-      break;
+      positional.push(args[i]);
     }
   }
-
+  result.text = positional.join(' ');
   return result;
 }
 
@@ -37,12 +33,7 @@ function parseArgs() {
  * Perform sentiment analysis on a text string using an Anthropic-compatible API and return structured results.
  * @param {string} text - The text to analyze.
  * @param {string} model - The model identifier to use for the API request.
- * @returns {{text: string, analysis: Object, model: string, usage: {input_tokens: number, output_tokens: number}}} An object containing:
- *  - `text`: a 100-character preview of the input text (with "..." if truncated),
- *  - `analysis`: the parsed JSON analysis produced by the model, or `{ raw, parseError: true }` if parsing failed,
- *  - `model`: the model identifier used,
- *  - `usage`: token usage with `input_tokens` and `output_tokens`.
- * @throws {Error} If no API key is set in `ANTHROPIC_API_KEY` or `AI_GATEWAY_API_KEY`, or if the API responds with a non-OK status.
+ * @returns {{text: string, analysis: Object, model: string, usage: {input_tokens: number, output_tokens: number}}} An object containing the result.
  */
 async function analyzeSentiment(text, model) {
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_API_KEY;
@@ -109,12 +100,11 @@ async function analyzeSentiment(text, model) {
 }
 
 /**
- * Entry point for the script: parses CLI arguments, validates input text, invokes sentiment analysis, prints JSON result, and exits on error.
- *
- * Prints usage and exits with code 1 when no text is provided. On success prints the analysis as formatted JSON to stdout; on failure prints an error object to stderr and exits with code 1.
+ * Entry point for the script.
  */
 async function main() {
-  const options = parseArgs();
+  const args = process.argv.slice(2);
+  const options = parseArgs(args);
 
   if (!options.text) {
     console.error('Usage: node sentiment.js <text>');
@@ -133,4 +123,6 @@ async function main() {
   }
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { main };

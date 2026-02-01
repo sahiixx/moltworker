@@ -32,7 +32,7 @@ const PBKDF2_ITERATIONS = 600000;
  */
 function parseArgs() {
   const result = {
-    data: '',
+    data: null,
     password: null,
     key: null,
     output: null
@@ -94,7 +94,7 @@ function encrypt(data, key) {
 function main() {
   const options = parseArgs();
 
-  if (!options.data || (!options.password && !options.key)) {
+  if (options.data === null || (!options.password && !options.key)) {
     console.error('Usage: node encrypt.js <data> --password <password>');
     console.error('       node encrypt.js <data> --key <hex_key>');
     console.error('Options:');

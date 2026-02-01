@@ -112,7 +112,7 @@ function main() {
       algorithm: options.algorithm,
       encoding: options.encoding,
       hash: output,
-      inputLength: typeof data === 'string' ? data.length : data.length
+      inputLength: typeof data === 'string' ? Buffer.byteLength(data) : data.length
     };
 
     if (options.isFile) {

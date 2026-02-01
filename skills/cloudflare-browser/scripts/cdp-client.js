@@ -13,9 +13,10 @@
  *   client.close();
  */
 
-const WebSocket = require('ws');
+const DefaultWebSocket = require('ws');
 
 function createClient(options = {}) {
+  const WebSocket = options.WebSocket || DefaultWebSocket;
   const CDP_SECRET = options.secret || process.env.CDP_SECRET;
   if (!CDP_SECRET) {
     throw new Error('CDP_SECRET environment variable not set');

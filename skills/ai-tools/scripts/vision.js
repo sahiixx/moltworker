@@ -8,21 +8,15 @@
 const fs = require('fs');
 const path = require('path');
 
-const args = process.argv.slice(2);
-
 /**
- * Parse CLI arguments into image, prompt, model, and detail options.
- *
- * @returns {{image: string, prompt: string, model: string, detail: string}} An object with:
- *  - image: the first positional argument or an empty string,
- *  - prompt: the remaining positional arguments joined by spaces or the default "Describe this image in detail.",
- *  - model: the value following `--model` or the default "claude-3-5-sonnet-20241022",
- *  - detail: the value following `--detail` or the default "auto".
+ * Parse command-line arguments into an options object.
+ * @param {string[]} args - CLI arguments
+ * @returns {{image: string, prompt: string, model: string, detail: string}} Options.
  */
-function parseArgs() {
+function parseArgs(args) {
   const result = {
     image: '',
-    prompt: '',
+    prompt: 'Describe this image in detail.',
     model: 'claude-3-5-sonnet-20241022',
     detail: 'auto'
   };
@@ -40,55 +34,20 @@ function parseArgs() {
     }
   }
 
-  result.image = positional[0] || '';
-  result.prompt = positional.slice(1).join(' ') || 'Describe this image in detail.';
+  if (positional.length > 0) {
+    result.image = positional[0];
+    if (positional.length > 1) {
+      result.prompt = positional.slice(1).join(' ');
+    }
+  }
 
   return result;
 }
 
 /**
- * Prepare image payload from a URL or local file path for API consumption.
- * @param {string} imagePath - Remote image URL (starting with `http://` or `https://`) or a local filesystem path.
- * @returns {{type: 'url', url: string} | {type: 'base64', media_type: string, data: string}} If `imagePath` is a URL, returns an object with `type: 'url'` and `url`. If it's a local file, returns `type: 'base64'` with the file's MIME `media_type` and base64-encoded `data`.
- * @throws {Error} If `imagePath` is a local path and the file does not exist.
+ * Analyze an image using an Anthropic-compatible Vision API.
  */
-function getImageData(imagePath) {
-  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-    return { type: 'url', url: imagePath };
-  }
-
-  const absolutePath = path.resolve(imagePath);
-  if (!fs.existsSync(absolutePath)) {
-    throw new Error(`Image not found: ${absolutePath}`);
-  }
-
-  const data = fs.readFileSync(absolutePath);
-  const base64 = data.toString('base64');
-  const ext = path.extname(imagePath).toLowerCase();
-
-  const mimeTypes = {
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.webp': 'image/webp'
-  };
-
-  const mediaType = mimeTypes[ext] || 'image/png';
-  return { type: 'base64', media_type: mediaType, data: base64 };
-}
-
-/**
- * Send an image and prompt to an Anthropic-compatible API and return the model's text analysis and token usage.
- *
- * @param {{type: 'url', url: string} | {type: 'base64', media_type: string, data: string}} imageData - Image payload: either a URL `{type: 'url', url}` or base64 `{type: 'base64', media_type, data}`.
- * @param {string} prompt - The text prompt to send alongside the image.
- * @param {string} model - The model identifier to use for the request.
- * @returns {{model: string, analysis: string, usage: {input_tokens: number, output_tokens: number}}} The chosen model, the model's textual analysis, and token usage counts.
- * @throws {Error} If neither ANTHROPIC_API_KEY nor AI_GATEWAY_API_KEY is set.
- * @throws {Error} If the API responds with a non-OK status (message includes HTTP status and response body).
- */
-async function analyzeWithClaude(imageData, prompt, model) {
+async function analyzeImage(imagePath, prompt, model, detail) {
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_API_KEY;
   const baseUrl = process.env.AI_GATEWAY_BASE_URL || 'https://api.anthropic.com';
 
@@ -96,25 +55,26 @@ async function analyzeWithClaude(imageData, prompt, model) {
     throw new Error('ANTHROPIC_API_KEY or AI_GATEWAY_API_KEY required');
   }
 
-  const content = [];
+  let mediaType = 'image/png';
+  let base64Data = '';
 
-  if (imageData.type === 'url') {
-    content.push({
-      type: 'image',
-      source: { type: 'url', url: imageData.url }
-    });
+  if (imagePath.startsWith('http')) {
+    const response = await fetch(imagePath);
+    const buffer = await response.arrayBuffer();
+    base64Data = Buffer.from(buffer).toString('base64');
+    const contentType = response.headers.get('content-type');
+    if (contentType) mediaType = contentType;
   } else {
-    content.push({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: imageData.media_type,
-        data: imageData.data
-      }
-    });
-  }
+    const resolvedPath = path.resolve(imagePath);
+    if (!fs.existsSync(resolvedPath)) {
+      throw new Error(`Image not found: ${imagePath}`);
+    }
+    const ext = path.extname(imagePath).toLowerCase();
+    if (ext === '.jpg' || ext === '.jpeg') mediaType = 'image/jpeg';
+    else if (ext === '.webp') mediaType = 'image/webp';
 
-  content.push({ type: 'text', text: prompt });
+    base64Data = fs.readFileSync(resolvedPath).toString('base64');
+  }
 
   const response = await fetch(`${baseUrl}/v1/messages`, {
     method: 'POST',
@@ -125,8 +85,24 @@ async function analyzeWithClaude(imageData, prompt, model) {
     },
     body: JSON.stringify({
       model,
-      max_tokens: 4096,
-      messages: [{ role: 'user', content }]
+      max_tokens: 1024,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mediaType,
+              data: base64Data
+            }
+          },
+          {
+            type: 'text',
+            text: prompt
+          }
+        ]
+      }]
     })
   });
 
@@ -147,27 +123,19 @@ async function analyzeWithClaude(imageData, prompt, model) {
 }
 
 /**
- * Orchestrates CLI operation: parses command-line arguments, runs image analysis with the configured model, and outputs the result as JSON.
- *
- * On success prints the analysis JSON to stdout. If required arguments are missing or an error occurs, prints an error object to stderr and exits with code 1.
+ * Entry point.
  */
 async function main() {
-  const options = parseArgs();
+  const args = process.argv.slice(2);
+  const options = parseArgs(args);
 
   if (!options.image) {
     console.error('Usage: node vision.js <image> <prompt> [OPTIONS]');
-    console.error('Arguments:');
-    console.error('  <image>       Path to image file or URL');
-    console.error('  <prompt>      Question about the image');
-    console.error('Options:');
-    console.error('  --model <m>   Vision model (default: claude-3-5-sonnet-20241022)');
-    console.error('  --detail <d>  Detail level: auto, low, high');
     process.exit(1);
   }
 
   try {
-    const imageData = getImageData(options.image);
-    const result = await analyzeWithClaude(imageData, options.prompt, options.model);
+    const result = await analyzeImage(options.image, options.prompt, options.model, options.detail);
     console.log(JSON.stringify(result, null, 2));
 
   } catch (err) {
@@ -176,4 +144,6 @@ async function main() {
   }
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { main };

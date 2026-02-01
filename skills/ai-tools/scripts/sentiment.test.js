@@ -13,31 +13,50 @@ describe('sentiment.js', () => {
     vi.restoreAllMocks();
   });
 
-  const runScript = (args, env = {}) => {
-    return new Promise((resolve, reject) => {
-      const proc = spawn('node', ['skills/ai-tools/scripts/sentiment.js', ...args], {
-        env: { ...process.env, ...env },
-      });
+  const runScript = async (args, env = {}) => {
+    const { main } = require('./sentiment.js');
+    const originalArgv = process.argv;
+    const originalEnv = { ...process.env };
+    process.argv = ['node', 'sentiment.js', ...args];
 
-      let stdout = '';
-      let stderr = '';
+    for (const key in env) {
+      process.env[key] = env[key];
+    }
 
-      proc.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      proc.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      proc.on('close', (code) => {
-        resolve({ code, stdout, stderr });
-      });
-
-      proc.on('error', (err) => {
-        reject(err);
-      });
+    let stdout = '';
+    let stderr = '';
+    let exitCode = 0;
+    const spyLog = vi.spyOn(console, 'log').mockImplementation(m => { stdout += m + '\n'; });
+    const spyError = vi.spyOn(console, 'error').mockImplementation(m => { stderr += m + '\n'; });
+    const spyExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      exitCode = code;
+      const err = new Error('process.exit');
+      err.code = code;
+      throw err;
     });
+
+    try {
+      await main();
+    } catch (err) {
+      if (err.message !== 'process.exit') {
+        stderr += err.message;
+        exitCode = 1;
+      }
+    } finally {
+      process.argv = originalArgv;
+      for (const key in env) {
+        if (originalEnv[key] === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = originalEnv[key];
+        }
+      }
+      spyLog.mockRestore();
+      spyError.mockRestore();
+      spyExit.mockRestore();
+    }
+
+    return { code: exitCode, stdout, stderr };
   };
 
   it('shows usage when no text is provided', async () => {
@@ -166,7 +185,7 @@ describe('sentiment.js', () => {
     global.fetch = mockFetch;
 
     const result = await runScript(
-      ['Good day', '--model', 'claude-3-sonnet-20240229'],
+      ['--model', 'claude-3-sonnet-20240229', 'Good day'],
       { ANTHROPIC_API_KEY: 'test-key' }
     );
 

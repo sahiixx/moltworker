@@ -17,31 +17,58 @@ describe('embeddings.js', () => {
     vi.restoreAllMocks();
   });
 
-  const runScript = (args, env = {}) => {
-    return new Promise((resolve, reject) => {
-      const proc = spawn('node', ['skills/ai-tools/scripts/embeddings.js', ...args], {
-        env: { ...process.env, ...env },
-      });
+  const runScript = async (args, env = {}) => {
+    const { main } = require('./embeddings.js');
+    const originalArgv = process.argv;
+    const originalEnv = process.env;
+    process.argv = ['node', 'embeddings.js', ...args];
+    // Create a combined env but don't overwrite the whole process.env
+    // as it might contain important things for the test runner.
+    // Instead, we'll temporarily set individual variables.
+    const tempEnv = { ...env };
+    for (const key in tempEnv) {
+      process.env[key] = tempEnv[key];
+    }
 
-      let stdout = '';
-      let stderr = '';
-
-      proc.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      proc.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      proc.on('close', (code) => {
-        resolve({ code, stdout, stderr });
-      });
-
-      proc.on('error', (err) => {
-        reject(err);
-      });
+    let stdout = '';
+    let stderr = '';
+    let exitCode = 0;
+    const spyLog = vi.spyOn(console, 'log').mockImplementation(m => { stdout += m + '\n'; });
+    const spyError = vi.spyOn(console, 'error').mockImplementation(m => { stderr += m + '\n'; });
+    const spyExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      exitCode = code;
+      const err = new Error('process.exit');
+      err.code = code;
+      throw err;
     });
+
+    try {
+      await main();
+    } catch (err) {
+      if (err.message !== 'process.exit') {
+        stderr += err.message;
+        exitCode = 1;
+      }
+    } finally {
+      process.argv = originalArgv;
+      // Restore env
+      for (const key in tempEnv) {
+        if (originalEnv[key] === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = originalEnv[key];
+        }
+      }
+      spyLog.mockRestore();
+      spyError.mockRestore();
+      spyExit.mockRestore();
+    }
+
+    return {
+      code: exitCode,
+      stdout,
+      stderr
+    };
   };
 
   it('shows usage when no text is provided', async () => {

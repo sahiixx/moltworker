@@ -32,7 +32,7 @@ const TAG_LENGTH = 16;
  */
 function parseArgs() {
   const result = {
-    data: '',
+    data: null,
     password: null,
     key: null,
     file: null
@@ -98,7 +98,7 @@ function decrypt(encrypted, key) {
 function main() {
   const options = parseArgs();
 
-  if ((!options.data && !options.file) || (!options.password && !options.key)) {
+  if ((options.data === null && !options.file) || (!options.password && !options.key)) {
     console.error('Usage: node decrypt.js <encrypted_json> --password <password>');
     console.error('       node decrypt.js --file <path> --key <hex_key>');
     console.error('Options:');
