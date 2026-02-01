@@ -62,9 +62,17 @@
       "bucket_name": "moltbot-data",
     },
   ],
-  // Cron trigger to sync moltbot data to R2 every 5 minutes
+  // Cron triggers:
+  // - Every 5 minutes: Sync moltbot data to R2
+  // - Daily at midnight: Run lead scoring (Dubai timezone UTC+4)
   "triggers": {
-    "crons": ["*/5 * * * *"],
+    "crons": ["*/5 * * * *", "0 20 * * *"],
+  },
+  // Environment variables for skills
+  "vars": {
+    "SKILLS_PATH": "/root/clawd/skills",
+    "ENABLE_DUBAI_REALESTATE": "true",
+    "DEFAULT_TIMEZONE": "Asia/Dubai"
   },
   // Browser Rendering binding for CDP shim
   "browser": {
@@ -86,4 +94,13 @@
   // - R2_ACCESS_KEY_ID: R2 access key ID (from R2 API tokens)
   // - R2_SECRET_ACCESS_KEY: R2 secret access key (from R2 API tokens)
   // - CF_ACCOUNT_ID: Your Cloudflare account ID (for R2 endpoint URL)
+  //
+  // Dubai Real Estate skill secrets (optional):
+  // - RETELL_API_KEY: Retell.ai API key for voice campaigns
+  // - RETELL_AGENT_ID: Retell.ai agent ID
+  // - PHONE_NUMBER: Outbound caller ID (+971 format)
+  // - GOOGLE_SHEETS_ID: Lead database sheet ID
+  // - GOOGLE_SHEETS_API_KEY: Google Sheets API key
+  // - AIRTABLE_API_KEY: Airtable API key
+  // - AIRTABLE_BASE_ID: Airtable base ID
 }

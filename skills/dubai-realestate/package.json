@@ -1,0 +1,39 @@
+{
+  "name": "dubai-realestate-skill",
+  "version": "1.0.0",
+  "description": "Dubai Real Estate Intelligence Suite for OpenClaw - RFM Scoring, Voice Campaigns, Property Search, Market Analysis",
+  "main": "index.js",
+  "scripts": {
+    "score": "node scripts/score-leads.js",
+    "campaign": "node scripts/voice-campaign.js",
+    "search": "node scripts/property-search.js",
+    "market": "node scripts/market-analysis.js",
+    "mortgage": "node scripts/mortgage-calc.js",
+    "match": "node scripts/client-match.js",
+    "score:champions": "node scripts/score-leads.js --segment CHAMPIONS --export",
+    "score:at-risk": "node scripts/score-leads.js --segment AT_RISK --export",
+    "score:cannot-lose": "node scripts/score-leads.js --segment CANNOT_LOSE --export",
+    "campaign:reactivation": "node scripts/voice-campaign.js --segment CANNOT_LOSE --template reactivation --export",
+    "campaign:luxury": "node scripts/voice-campaign.js --segment CHAMPIONS --template luxury --export",
+    "report": "node scripts/market-analysis.js --report --export"
+  },
+  "keywords": [
+    "dubai",
+    "real-estate",
+    "rfm",
+    "lead-scoring",
+    "voice-campaigns",
+    "retell-ai",
+    "openclaw",
+    "ai-assistant"
+  ],
+  "author": "Dubai Premier Properties",
+  "license": "MIT",
+  "dependencies": {
+    "csv-parse": "^5.5.3",
+    "axios": "^1.6.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
