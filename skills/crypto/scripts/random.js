@@ -9,6 +9,15 @@ const crypto = require('crypto');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments and produce an options object for random data generation.
+ *
+ * Recognizes `--bytes N`, `--encoding E`, and `--count N`; unspecified options use defaults.
+ * @returns {{bytes: number, encoding: string, count: number}} An options object:
+ * - bytes: number of random bytes to generate (default 32)
+ * - encoding: output encoding name (default "hex")
+ * - count: number of values to produce (default 1)
+ */
 function parseArgs() {
   const result = {
     bytes: 32,
@@ -32,6 +41,12 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Generate cryptographically secure random data in a variety of encodings.
+ * @param {number} bytes - Number of random bytes to base the output on (used to derive length); expected 1–1024.
+ * @param {string} encoding - Output encoding. One of: 'uuid' (UUID v4 string), 'words' (hyphen-separated passphrase from an internal wordlist), 'hex', 'base64', 'base64url', 'binary' (concatenated 8-bit binary segments), or 'decimal' (concatenated byte values). Defaults to 'hex' when unrecognized.
+ * @returns {string} A string containing the generated value: a UUID for 'uuid', a hyphen-separated word sequence for 'words', or a representation of random bytes in the requested encoding for the other options.
+ */
 function generateRandom(bytes, encoding) {
   if (encoding === 'uuid') {
     return crypto.randomUUID();
@@ -79,6 +94,15 @@ function generateRandom(bytes, encoding) {
   }
 }
 
+/**
+ * Parse CLI options, generate the requested random values, and print a JSON result.
+ *
+ * Validates that `bytes` is between 1 and 1024 and `count` is between 1 and 100; on validation failure
+ * prints an error to stderr and exits the process with code 1. Generates `count` values using the
+ * chosen encoding and prints a JSON object to stdout containing `bytes`, `encoding`, `count`, and
+ * `values` (unwrapped when `count` is 1). For encodings other than `uuid` and `words` the JSON also
+ * includes a `bits` field equal to `bytes * 8`.
+ */
 function main() {
   const options = parseArgs();
 

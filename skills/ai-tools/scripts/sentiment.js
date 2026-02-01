@@ -7,6 +7,14 @@
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse CLI arguments into an options object containing the input text and selected model.
+ *
+ * Recognizes a `--model <value>` flag to set the model; the first non-flag argument and any following
+ * arguments are joined with spaces to form the `text`. If no model flag is provided, the default
+ * model is `claude-3-5-haiku-20241022`.
+ * @returns {{text: string, model: string}} The parsed options: `text` is the combined remaining CLI arguments (or an empty string), `model` is the chosen model name.
+ */
 function parseArgs() {
   const result = {
     text: '',
@@ -26,6 +34,22 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Analyze the sentiment and emotional tone of the provided text using an Anthropic-style model.
+ *
+ * Sends the text to the specified model and returns a structured analysis (or a fallback raw response if parsing fails).
+ *
+ * @param {string} text - The input text to analyze.
+ * @param {string} model - The model identifier to use for analysis.
+ * @returns {{text: string, analysis: Object, model: string, usage: {input_tokens: number, output_tokens: number}}}
+ *   An object containing:
+ *   - `text`: a truncated preview (first 100 characters, with "..." if longer).
+ *   - `analysis`: the parsed JSON analysis matching the expected schema (`sentiment`, `score`, `confidence`, `emotions`, `tone`, `keywords`), or `{ raw: string, parseError: true }` if parsing failed.
+ *   - `model`: the model identifier used.
+ *   - `usage`: token usage with `input_tokens` and `output_tokens`.
+ * @throws {Error} If neither ANTHROPIC_API_KEY nor AI_GATEWAY_API_KEY is set.
+ * @throws {Error} If the API responds with a non-OK HTTP status (message includes status and response body).
+ */
 async function analyzeSentiment(text, model) {
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_API_KEY;
   const baseUrl = process.env.AI_GATEWAY_BASE_URL || 'https://api.anthropic.com';
@@ -90,6 +114,13 @@ async function analyzeSentiment(text, model) {
   };
 }
 
+/**
+ * Parse CLI arguments, validate input, perform sentiment analysis, and print the result.
+ *
+ * If no text argument is provided, prints usage information and exits with code 1.
+ * On success, writes the analysis object as formatted JSON to stdout.
+ * On error, writes a JSON object with an `error` message to stderr and exits with code 1.
+ */
 async function main() {
   const options = parseArgs();
 

@@ -7,6 +7,17 @@
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse CLI arguments and produce an options object for link extraction and output.
+ *
+ * @returns {{url: string, internal: boolean, external: boolean, filter: string|null, format: string, timeout: number}} An options object where:
+ * - `url` is the target URL (first non-flag argument) or empty string if none provided.
+ * - `internal` is `true` when `--internal` was passed.
+ * - `external` is `true` when `--external` was passed.
+ * - `filter` is the value provided to `--filter`, or `null` if not set.
+ * - `format` is the output format (`'json'`, `'csv'`, or `'list'`), defaulting to `'json'`.
+ * - `timeout` is the request timeout in milliseconds, taken from `--timeout` or defaulting to `30000`.
+ */
 function parseArgs() {
   const result = {
     url: '',
@@ -39,6 +50,19 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Extracts and normalizes anchor links from an HTML string relative to a base URL.
+ *
+ * @param {string} html - HTML content to scan for anchor tags.
+ * @param {string} baseUrl - Base URL used to resolve relative links.
+ * @returns {Array<Object>} An array of link objects. Each object has the properties:
+ *  - `url` {string} The resolved absolute URL without fragment.
+ *  - `text` {string} The anchor text, trimmed and truncated to 100 characters.
+ *  - `internal` {boolean} `true` if the link's hostname matches the base URL's hostname.
+ *  - `external` {boolean} `true` if the link's hostname differs from the base URL's hostname.
+ *  - `domain` {string} The link's hostname.
+ *  - `path` {string} The link's pathname.
+ */
 function extractLinks(html, baseUrl) {
   const links = [];
   const regex = /<a[^>]+href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
@@ -93,6 +117,11 @@ function extractLinks(html, baseUrl) {
   return links;
 }
 
+/**
+ * Fetches the configured URL, extracts and normalizes anchor links, applies any requested filters, and writes the results to stdout.
+ *
+ * The command-line options control behavior: the target URL (required), `--internal`/`--external` to restrict results by scope, `--filter <pattern>` to keep URLs matching a case-insensitive regex, `--format <json|csv|list>` to choose output format, and `--timeout <ms>` to limit the request time. If the URL is missing or an error occurs (including timeout), the process prints an error object and exits with code 1.
+ */
 async function main() {
   const options = parseArgs();
 

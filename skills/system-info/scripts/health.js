@@ -10,6 +10,15 @@ const path = require('path');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments into an options object for health checks.
+ *
+ * @returns {{url: string, timeout: number, expect: number, config: string|null}} An options object:
+ *   - `url`: target URL (empty string if not provided).
+ *   - `timeout`: request timeout in milliseconds (default 5000).
+ *   - `expect`: expected HTTP status code (default 200).
+ *   - `config`: path to a JSON config file, or `null` if not provided.
+ */
 function parseArgs() {
   const result = {
     url: '',
@@ -36,6 +45,25 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Performs an HTTP GET health check for an endpoint and returns a structured result.
+ *
+ * @param {Object} endpoint - Endpoint configuration.
+ * @param {string} endpoint.url - Request URL to check.
+ * @param {string} [endpoint.name] - Optional human-readable name for the endpoint.
+ * @param {number} [endpoint.timeout=5000] - Timeout in milliseconds for the request.
+ * @param {number} [endpoint.expect=200] - Expected HTTP status code considered healthy.
+ * @returns {Object} An object describing the check:
+ * - `name`: endpoint name or `url`,
+ * - `url`: the checked URL,
+ * - `status`: `'healthy'`, `'unhealthy'`, or `'error'`,
+ * - `statusCode`: actual HTTP status code when available,
+ * - `expectedCode`: the expected HTTP status code,
+ * - `responseTime`: elapsed time in milliseconds,
+ * - `timestamp`: ISO 8601 timestamp of the check,
+ * - `body`: parsed JSON body when present (otherwise `null`),
+ * - `error`: error message or `'timeout'` when `status` is `'error'`.
+ */
 async function checkEndpoint(endpoint) {
   const { url, name, timeout = 5000, expect = 200 } = endpoint;
   const startTime = Date.now();
@@ -92,6 +120,16 @@ async function checkEndpoint(endpoint) {
   }
 }
 
+/**
+ * Run health checks for one or more endpoints, print a JSON report, and exit with an appropriate status code.
+ *
+ * Parses command-line arguments or a config file to build an endpoints list, runs checks in parallel using
+ * checkEndpoint, aggregates the results into an overall report (including counts and timestamp), writes the
+ * pretty-printed JSON report to stdout, and terminates the process:
+ * - exits with code 0 if all endpoints are healthy,
+ * - exits with code 1 if any endpoint is unhealthy,
+ * - exits with code 2 on unexpected errors (prints an error object to stderr).
+ */
 async function main() {
   const options = parseArgs();
 

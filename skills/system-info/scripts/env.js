@@ -9,6 +9,15 @@ const os = require('os');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments into the script's options object.
+ *
+ * Recognizes `--show-values`, `--check <comma-separated-names>`, and `--filter <pattern>`.
+ * @returns {{showValues: boolean, check: string[]|null, filter: string|null}} An options object:
+ *  - showValues: `true` when `--show-values` was provided.
+ *  - check: array of variable names when `--check` was provided, otherwise `null`.
+ *  - filter: the filter pattern string when `--filter` was provided, otherwise `null`.
+ */
 function parseArgs() {
   const result = {
     showValues: false,
@@ -31,6 +40,12 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Obscures sensitive environment variable values based on the variable name.
+ * @param {string} key - The environment variable name used to determine sensitivity.
+ * @param {string} value - The original environment variable value.
+ * @returns {string} The masked value: `'****'` for short values (length ≤ 4), or the value with its middle characters replaced (first two and last two characters preserved) if the name matches sensitive patterns; otherwise the original value.
+ */
 function maskValue(key, value) {
   // Mask potentially sensitive values
   const sensitivePatterns = [
@@ -46,6 +61,11 @@ function maskValue(key, value) {
   return value;
 }
 
+/**
+ * Orchestrates the script: parses CLI options then either verifies required environment variables or lists environment variables and writes a JSON report to stdout.
+ *
+ * In check mode (enabled with `--check`), emits a JSON object containing per-variable existence and non-empty checks and exits with code 0 if all required variables are present and non-empty, otherwise exits with code 1. In list mode (default), emits a JSON report with environment metadata, a sorted list of variables, counts, and categorized counts. Use `--filter` to restrict which variables are included and `--show-values` to include masked values.
+ */
 function main() {
   const options = parseArgs();
 

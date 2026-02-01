@@ -10,6 +10,15 @@ const path = require('path');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments into options for the vision analysis script.
+ *
+ * @returns {Object} Parsed options.
+ * @property {string} image - The first positional argument (image path or URL), or an empty string if none provided.
+ * @property {string} prompt - Remaining positional arguments joined with spaces, or the default "Describe this image in detail." if none provided.
+ * @property {string} model - Model name, defaults to 'claude-3-5-sonnet-20241022', can be overridden with `--model <value>`.
+ * @property {string} detail - Detail level, defaults to 'auto', can be overridden with `--detail <value>`.
+ */
 function parseArgs() {
   const result = {
     image: '',
@@ -37,6 +46,17 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Prepare image input for analysis from either a URL or a local file path.
+ *
+ * If `imagePath` is a URL (starts with `http://` or `https://`), returns an object describing the remote image. Otherwise reads the local file, encodes it as base64, and returns an object with the file's MIME type and base64 data.
+ *
+ * @param {string} imagePath - A remote image URL or a local filesystem path to an image.
+ * @returns {{type: 'url', url: string} | {type: 'base64', media_type: string, data: string}} An object describing the image:
+ * - If `type` is `'url'`, `url` contains the original image URL.
+ * - If `type` is `'base64'`, `media_type` is the image MIME type (e.g., `image/png`) and `data` is the base64-encoded file contents.
+ * @throws {Error} If `imagePath` is a local path and the file does not exist.
+ */
 function getImageData(imagePath) {
   if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
     return { type: 'url', url: imagePath };
@@ -63,6 +83,16 @@ function getImageData(imagePath) {
   return { type: 'base64', media_type: mediaType, data: base64 };
 }
 
+/**
+ * Send an image and prompt to an Anthropic-compatible multimodal endpoint and return the model's analysis.
+ *
+ * @param {{type: 'url', url: string} | {type: 'base64', media_type: string, data: string}} imageData - Image input either as a remote URL ({ type: 'url', url }) or as base64-encoded data ({ type: 'base64', media_type, data }).
+ * @param {string} prompt - The textual prompt to accompany the image.
+ * @param {string} model - The model identifier to use for the request.
+ * @returns {{model: string, analysis: string, usage: {input_tokens: number, output_tokens: number}}} An object containing the model id, the analysis text returned by the model, and token usage counts.
+ * @throws {Error} If neither ANTHROPIC_API_KEY nor AI_GATEWAY_API_KEY is set in the environment.
+ * @throws {Error} If the API responds with a non-OK status; the error message includes the HTTP status and response body.
+ */
 async function analyzeWithClaude(imageData, prompt, model) {
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_API_KEY;
   const baseUrl = process.env.AI_GATEWAY_BASE_URL || 'https://api.anthropic.com';
@@ -121,6 +151,13 @@ async function analyzeWithClaude(imageData, prompt, model) {
   };
 }
 
+/**
+ * Parse CLI arguments, perform vision analysis on the provided image, and print the result as JSON.
+ *
+ * If the required image argument is missing, prints usage information and exits with code 1.
+ * On success, writes a pretty-printed JSON result to stdout. On failure, writes a JSON error
+ * object to stderr and exits with code 1.
+ */
 async function main() {
   const options = parseArgs();
 

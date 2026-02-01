@@ -12,6 +12,16 @@ const path = require('path');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse the command-line arguments into write-file options.
+ *
+ * Recognizes the `--append` and `--mkdir` flags and assigns the first non-option argument to `path` and the second non-option argument to `content`.
+ * @returns {{path: string, content: string, append: boolean, mkdir: boolean}} An object with:
+ *  - `path`: the target file path (empty string if not provided),
+ *  - `content`: the content to write (empty string if not provided),
+ *  - `append`: `true` if `--append` was present, `false` otherwise,
+ *  - `mkdir`: `true` if `--mkdir` was present, `false` otherwise.
+ */
 function parseArgs() {
   const result = {
     path: '',
@@ -37,6 +47,11 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Write content to a file from CLI options, optionally creating parent directories or appending.
+ *
+ * Validates that a target path and content are provided via command-line arguments; if missing, prints usage and exits with code 1. If the `--mkdir` option is present, creates parent directories. Replaces escaped `\n` sequences in the content with actual newlines, then either writes or appends the content to the resolved file path and logs the number of bytes written. On any error during directory creation or file I/O, prints an error message and exits with code 1.
+ */
 function main() {
   const options = parseArgs();
 

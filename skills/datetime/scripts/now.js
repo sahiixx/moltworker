@@ -10,6 +10,15 @@
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments into an options object for the script.
+ *
+ * Recognizes `--timezone <tz>`, `--format <fmt>`, and `--json`. Defaults: `timezone` is `null`, `format` is `"human"`, and `json` is `false`. Flags are parsed linearly; values following their flag are consumed.
+ * @returns {{timezone: string|null, format: string, json: boolean}} An options object:
+ *  - `timezone`: IANA time zone identifier or `null` when not provided.
+ *  - `format`: one of the supported format names (default `"human"`).
+ *  - `json`: `true` when `--json` was present, `false` otherwise.
+ */
 function parseArgs() {
   const result = {
     timezone: null,
@@ -32,6 +41,13 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Format a Date into one of three representations ('iso', 'unix', or 'human'), optionally rendered for a specified IANA time zone.
+ * @param {Date} date - The Date object to format.
+ * @param {string|null|undefined} timezone - IANA time zone identifier (e.g., "America/Los_Angeles"), or `null`/`undefined` to use the system/default zone.
+ * @param {'iso'|'unix'|'human'} format - Output format: `'iso'` for ISO 8601 (or a locale ISO-like string with time zone when a timezone is provided), `'unix'` for seconds-since-epoch as a string, or `'human'` for a human-readable date/time.
+ * @returns {string} The formatted date/time according to the requested `format` and `timezone`.
+ */
 function formatDate(date, timezone, format) {
   const options = {
     timeZone: timezone || undefined,
@@ -72,6 +88,18 @@ function formatDate(date, timezone, format) {
   return formatter.format(date);
 }
 
+/**
+ * Print the current date/time either as a single formatted string or as a structured JSON object based on command-line options.
+ *
+ * When JSON output is selected, prints an object with:
+ * - local: { iso, human, timezone } — system-local representations (ISO with local offset, human-readable, and system time zone).
+ * - utc: { iso, human } — UTC representations.
+ * - unix: epoch seconds.
+ * - components: { year, month, day, hour, minute, second, dayOfWeek, weekNumber } — numeric and human components.
+ * If a specific timezone was requested, includes requested: { iso, human, timezone } for that zone.
+ *
+ * Otherwise prints a single formatted date/time string using the requested format and optional timezone.
+ */
 function main() {
   const options = parseArgs();
   const now = new Date();
@@ -120,6 +148,13 @@ function main() {
   }
 }
 
+/**
+ * Calculate the ISO-8601 week number for a given date.
+ *
+ * Uses UTC-based calculations to determine the ISO week (1–53) for the provided Date.
+ * @param {Date} date - The date to evaluate.
+ * @returns {number} The ISO week number (1 through 53) for the given date.
+ */
 function getWeekNumber(date) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayNum = d.getUTCDay() || 7;

@@ -9,6 +9,14 @@ const os = require('os');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments to determine output format, metric prefix, and optional interval.
+ *
+ * @returns {{format: string, prefix: string, interval: number|null}} An object with:
+ * - `format`: output format name (default `"json"`),
+ * - `prefix`: metric name prefix (default `"system"`),
+ * - `interval`: reporting interval in seconds parsed as an integer, or `null` if not provided.
+ */
 function parseArgs() {
   const result = {
     format: 'json',
@@ -32,6 +40,36 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Collects current system and process metrics and returns them as a structured object.
+ *
+ * The returned object contains a `timestamp` and nested sections: `cpu` (usage percent, core count, 1/5/15m load averages),
+ * `memory` (total, used, free bytes and usage percent), `process` (heap used/total, RSS, uptime in seconds),
+ * and `system` (uptime in seconds, platform, architecture).
+ *
+ * @returns {Object} An object with the following shape:
+ * - `timestamp` {number} Milliseconds since epoch.
+ * - `cpu` {Object} CPU metrics:
+ *   - `usage_percent` {number} Overall CPU usage percentage rounded to two decimals.
+ *   - `cores` {number} Number of CPU cores.
+ *   - `load_1m` {number} 1-minute load average.
+ *   - `load_5m` {number} 5-minute load average.
+ *   - `load_15m` {number} 15-minute load average.
+ * - `memory` {Object} Memory metrics:
+ *   - `total_bytes` {number} Total system memory in bytes.
+ *   - `used_bytes` {number} Used memory in bytes.
+ *   - `free_bytes` {number} Free memory in bytes.
+ *   - `usage_percent` {number} Memory usage percentage rounded to two decimals.
+ * - `process` {Object} Process metrics:
+ *   - `heap_used_bytes` {number} V8 heap used in bytes.
+ *   - `heap_total_bytes` {number} V8 heap total in bytes.
+ *   - `rss_bytes` {number} Resident set size in bytes.
+ *   - `uptime_seconds` {number} Process uptime in seconds.
+ * - `system` {Object} System metadata:
+ *   - `uptime_seconds` {number} System uptime in seconds.
+ *   - `platform` {string} Operating system platform.
+ *   - `arch` {string} CPU architecture.
+ */
 function collectMetrics() {
   const cpus = os.cpus();
   let cpuIdle = 0;
@@ -79,6 +117,16 @@ function collectMetrics() {
   };
 }
 
+/**
+ * Format collected system and process metrics into a Prometheus exposition text block using the given prefix.
+ *
+ * @param {Object} metrics - Metrics object with the following sections and fields:
+ *   - cpu: { usage_percent, cores, load_1m, load_5m, load_15m }
+ *   - memory: { total_bytes, used_bytes, usage_percent }
+ *   - process: { heap_used_bytes, heap_total_bytes, rss_bytes }
+ *   - system: { uptime_seconds }
+ * @param {string} prefix - Prefix to prepend to all metric names.
+ * @returns {string} A Prometheus-formatted text block containing HELP/TYPE annotations and metric lines.
 function formatPrometheus(metrics, prefix) {
   const lines = [];
 
@@ -128,6 +176,12 @@ function formatPrometheus(metrics, prefix) {
   return lines.join('\n');
 }
 
+/**
+ * Format collected system metrics into StatsD-compatible lines using the provided prefix.
+ * @param {Object} metrics - Metrics object containing `cpu`, `memory`, `process`, and `system` sections as produced by collectMetrics.
+ * @param {string} prefix - Metric name prefix to prepend to each StatsD metric.
+ * @returns {string} StatsD-formatted metric lines separated by newline characters.
+ */
 function formatStatsd(metrics, prefix) {
   const lines = [];
 
@@ -143,6 +197,14 @@ function formatStatsd(metrics, prefix) {
   return lines.join('\n');
 }
 
+/**
+ * Run the metrics collection and output loop according to command-line options.
+ *
+ * Reads CLI options for output format, prefix, and interval; collects system and
+ * process metrics; formats them as Prometheus, StatsD, or pretty JSON; and writes
+ * the formatted output to stdout. If an interval is provided, emits immediately
+ * and then repeats every `interval` milliseconds.
+ */
 function main() {
   const options = parseArgs();
 

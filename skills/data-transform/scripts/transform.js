@@ -10,6 +10,19 @@ const path = require('path');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments and produce an options object for the transform pipeline.
+ *
+ * @returns {{input: string, map: (string|null), filter: (string|null), sort: (string|null), reverse: boolean, unique: (string|null), group: (string|null), limit: (number|null)}} An object with parsed options:
+ * - input: first positional argument or an empty string.
+ * - map: expression for mapping items, or `null`.
+ * - filter: expression for filtering items, or `null`.
+ * - sort: field name to sort by, or `null`.
+ * - reverse: `true` when `--reverse` was provided, otherwise `false`.
+ * - unique: field name to deduplicate by, or `null`.
+ * - group: field name to group by, or `null`.
+ * - limit: numeric limit parsed from `--limit`, or `null`.
+ */
 function parseArgs() {
   const result = {
     input: '',
@@ -51,6 +64,13 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Evaluate a JavaScript expression string with a restricted global scope where `x`, `i`, and `index` are available.
+ * @param {string} expr - JavaScript expression to evaluate; may reference `x`, `i`, `index` and standard globals (Math, String, Number, Boolean, Array, Object, Date, JSON).
+ * @param {*} x - Value bound to `x` inside the expression.
+ * @param {number} index - Numeric index bound to both `i` and `index` inside the expression.
+ * @returns {*} The value produced by evaluating `expr` with `x` and `index` in scope.
+ */
 function safeEval(expr, x, index) {
   // Create a safe evaluation context
   const fn = new Function('x', 'i', 'index', `
@@ -68,6 +88,11 @@ function safeEval(expr, x, index) {
   return fn(x, index, index);
 }
 
+/**
+ * Run the CLI data transformation: read JSON input (file path or literal), apply configured transformations, and print the result.
+ *
+ * The transformation pipeline, applied in order when the corresponding options are provided, is: filter, map, unique (deduplicate by field), sort (by field), reverse, group (by field), and limit (slice array). Input that is not an array is wrapped into a single-element array. The function writes the final JSON to stdout and writes usage or error information to stderr; on missing input or on any processing error it exits the process with code 1.
+ */
 function main() {
   const options = parseArgs();
 

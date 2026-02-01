@@ -11,6 +11,20 @@ const path = require('path');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments into an options object for key generation.
+ *
+ * Recognizes positional type (case-insensitive) and the flags `--bits <n>`, `--curve <name>`,
+ * `--output <path>`, and `--password <pw>`. Missing flags leave their corresponding values at defaults.
+ *
+ * @returns {{type: string, bits: number|null, curve: string, output: string|null, password: string|null}}
+ * An object with:
+ * - `type`: one of the supported generation types (default `'aes'`),
+ * - `bits`: numeric bit length when provided (or `null`),
+ * - `curve`: elliptic curve name (default `'P-256'`),
+ * - `output`: output directory path when provided (or `null`),
+ * - `password`: provided password for password-hash generation (or `null`).
+ */
 function parseArgs() {
   const result = {
     type: 'aes',
@@ -41,6 +55,16 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Generate an AES symmetric key of the specified size.
+ * @param {number} bits - Key size in bits. Must be one of 128, 192, or 256. Defaults to 256.
+ * @returns {{type: string, bits: number, key: string, keyBase64: string}} An object with:
+ *   - `type`: the string `'aes'`.
+ *   - `bits`: the key size in bits.
+ *   - `key`: the raw key encoded as a hexadecimal string.
+ *   - `keyBase64`: the raw key encoded as a base64 string.
+ * @throws {Error} If `bits` is not one of 128, 192, or 256.
+ */
 function generateAESKey(bits = 256) {
   const validBits = [128, 192, 256];
   if (!validBits.includes(bits)) {
@@ -56,6 +80,11 @@ function generateAESKey(bits = 256) {
   };
 }
 
+/**
+ * Generate an RSA public/private key pair.
+ * @param {number} bits - Modulus length in bits (e.g., 2048).
+ * @returns {{type: string, bits: number, publicKey: string, privateKey: string}} An object containing the key type, modulus size, and PEM-encoded public and private keys.
+ */
 function generateRSAKeyPair(bits = 2048) {
   const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
     modulusLength: bits,
@@ -71,6 +100,11 @@ function generateRSAKeyPair(bits = 2048) {
   };
 }
 
+/**
+ * Generate an ECDSA key pair for the specified named curve.
+ * @param {string} curve - Curve identifier (e.g., 'P-256', 'P-384', 'P-521' or an OpenSSL curve name). Defaults to 'P-256'.
+ * @returns {{type: string, curve: string, publicKey: string, privateKey: string}} An object containing the key type, curve, and PEM-encoded `publicKey` and `privateKey`.
+ */
 function generateECDSAKeyPair(curve = 'P-256') {
   const curveMap = {
     'P-256': 'prime256v1',
@@ -94,6 +128,11 @@ function generateECDSAKeyPair(curve = 'P-256') {
   };
 }
 
+/**
+ * Generate an Ed25519 public/private key pair encoded in PEM.
+ *
+ * @returns {{type: string, publicKey: string, privateKey: string}} An object with `type` equal to `'ed25519'`, a PEM-encoded `publicKey` (SPKI), and a PEM-encoded `privateKey` (PKCS8).
+ */
 function generateEd25519KeyPair() {
   const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519', {
     publicKeyEncoding: { type: 'spki', format: 'pem' },
@@ -107,6 +146,11 @@ function generateEd25519KeyPair() {
   };
 }
 
+/**
+ * Create a PBKDF2-HMAC-SHA256 password hash with a random 16-byte salt and 600000 iterations.
+ * @param {string} password - The plaintext password to derive a key from.
+ * @returns {Object} An object containing: `type` ('password'), `algorithm` ('pbkdf2-sha256'), `iterations` (number), `salt` (base64 string), `hash` (base64 string), and `combined` (string formatted as `$pbkdf2-sha256$<iterations>$<salt-base64>$<hash-base64>`).
+ */
 function generatePasswordHash(password) {
   const salt = crypto.randomBytes(16);
   const iterations = 600000;
@@ -124,6 +168,11 @@ function generatePasswordHash(password) {
   };
 }
 
+/**
+ * Parse command-line arguments, generate the requested cryptographic artifact, and either print the result as JSON or write PEM files to an output directory.
+ *
+ * Validates the requested type against supported types (aes, rsa, ecdsa, ed25519, password) and prints usage then exits with code 1 on invalid type. If `--output` is provided and the generated result includes `publicKey`/`privateKey`, writes `public.pem` and `private.pem` into the output directory and prints a JSON summary with file paths; otherwise prints the generated result as JSON. On error, prints a JSON object with an `error` message and exits with code 1.
+ */
 function main() {
   const options = parseArgs();
 

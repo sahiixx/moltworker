@@ -16,12 +16,21 @@ const os = require('os');
 const STORAGE_DIR = path.join(os.homedir(), '.moltbot', 'memory');
 const STORE_FILE = path.join(STORAGE_DIR, 'store.json');
 
+/**
+ * Ensure the storage directory exists, creating it (recursively) if absent.
+ */
 function ensureStorageDir() {
   if (!fs.existsSync(STORAGE_DIR)) {
     fs.mkdirSync(STORAGE_DIR, { recursive: true });
   }
 }
 
+/**
+ * Load the persistent key-value store from disk.
+ *
+ * Ensures the storage directory exists; if the store file is missing or contains invalid JSON, returns an empty object.
+ * @returns {Object} The parsed store object, or an empty object if the file doesn't exist or cannot be parsed.
+ */
 function loadStore() {
   ensureStorageDir();
   if (fs.existsSync(STORE_FILE)) {
@@ -34,6 +43,12 @@ function loadStore() {
   return {};
 }
 
+/**
+ * Persist the given key-value store object to the configured store file on disk.
+ *
+ * Ensures the storage directory exists, then writes the data as pretty-printed JSON to the store file.
+ * @param {Object} data - The in-memory store object to persist (keys mapped to values).
+ */
 function saveStore(data) {
   ensureStorageDir();
   fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2));
@@ -42,6 +57,18 @@ function saveStore(data) {
 const args = process.argv.slice(2);
 const command = args[0];
 
+/**
+ * Parse CLI arguments and execute the store commands (get, set, delete, list, clear) against the on-disk key-value store.
+ *
+ * Supported commands:
+ * - get <key>: prints the value for `key` or a JSON error if the key is not found.
+ * - set <key> <value>: stores the value (JSON-parsed when possible, otherwise as a string) and prints a success payload.
+ * - delete <key>: removes `key` and prints a success payload, or a JSON error if the key is not found.
+ * - list [--prefix <p>]: prints a JSON listing of keys with type and a 50-character preview; filters by prefix when provided.
+ * - clear --confirm: deletes all entries only when `--confirm` is present and prints the number cleared.
+ *
+ * Exits the process with a non-zero code for missing/invalid usage, unknown commands, or when requested keys are not found.
+ */
 function main() {
   if (!command) {
     console.error('Usage:');

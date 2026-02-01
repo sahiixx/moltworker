@@ -6,6 +6,14 @@
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments into an options object containing datetime and timezone targets.
+ *
+ * @returns {{datetime: string, from: (string|null), to: (string|null)}} An object with:
+ *  - `datetime`: the datetime string (empty string if none provided),
+ *  - `from`: the source IANA timezone string or `null` if unspecified,
+ *  - `to`: the target IANA timezone string or `null` if unspecified.
+ */
 function parseArgs() {
   const result = {
     datetime: '',
@@ -28,6 +36,17 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Parse a datetime string into a JavaScript Date.
+ *
+ * Supports ISO-like strings and the "YYYY-MM-DD HH:mm" format with optional seconds ("YYYY-MM-DD HH:mm:ss").
+ * The optional `timezone` parameter is accepted but not used by this parser.
+ *
+ * @param {string} str - The datetime string to parse.
+ * @param {string} [timezone] - Optional timezone hint; currently ignored.
+ * @returns {Date} The parsed Date object representing the given local date and time.
+ * @throws {Error} If the input string cannot be parsed as a valid datetime.
+ */
 function parseDateTime(str, timezone) {
   // Try ISO format first
   let date = new Date(str);
@@ -49,6 +68,12 @@ function parseDateTime(str, timezone) {
   return date;
 }
 
+/**
+ * Format a Date object for a given IANA timezone as "YYYY-MM-DD HH:mm:ss <TimeZoneName>".
+ * @param {Date} date - The Date to format.
+ * @param {string} timezone - IANA timezone identifier (e.g., "America/New_York").
+ * @returns {string} Formatted date string in the form `YYYY-MM-DD HH:mm:ss <TimeZoneName>`.
+ */
 function formatInTimezone(date, timezone) {
   const options = {
     timeZone: timezone,
@@ -73,6 +98,11 @@ function formatInTimezone(date, timezone) {
   return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second} ${values.timeZoneName}`;
 }
 
+/**
+ * Parse CLI arguments, validate required fields, convert the provided datetime between time zones, and print a JSON result.
+ *
+ * Prints a JSON object with `input`, `from`, `to`, `result`, and `iso` to stdout on success. On missing arguments or on parse/format errors, prints usage or an error message to stderr and exits the process with a non-zero code.
+ */
 function main() {
   const options = parseArgs();
 

@@ -10,6 +10,16 @@ const path = require('path');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments into an options object for the diff tool.
+ *
+ * @returns {Object} The parsed options.
+ * @property {string} file1 - Path or JSON string for the first input (empty string if not provided).
+ * @property {string} file2 - Path or JSON string for the second input (empty string if not provided).
+ * @property {string} format - Output format ('json' by default; e.g., 'unified').
+ * @property {boolean} ignoreOrder - Whether to ignore array element order.
+ * @property {boolean} ignoreCase - Whether to ignore string case when comparing.
+ */
 function parseArgs() {
   const result = {
     file1: '',
@@ -39,6 +49,21 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Recursively compares two values and reports added, removed, and changed entries along with a count of unchanged items.
+ *
+ * @param {*} obj1 - The first value to compare.
+ * @param {*} obj2 - The second value to compare.
+ * @param {string} [path='$'] - The JSON-path-like location used to label differences (e.g., "$.foo[0]").
+ * @param {Object} [options] - Comparison options.
+ * @param {boolean} [options.ignoreOrder=false] - When true, treat arrays as unordered sets (order-insensitive).
+ * @param {boolean} [options.ignoreCase=false] - When true, compare string primitives case-insensitively.
+ * @returns {{ added: Array<{path: string, value: *}>, removed: Array<{path: string, value: *}>, changed: Array<{path: string, old: *, new: *}>, unchanged: number }} An object summarizing differences:
+ *  - `added`: entries present only in `obj2`.
+ *  - `removed`: entries present only in `obj1`.
+ *  - `changed`: entries present in both but with different values; each entry includes `old` and `new`.
+ *  - `unchanged`: count of equal primitive comparisons encountered.
+ */
 function deepCompare(obj1, obj2, path = '$', options = {}) {
   const changes = {
     added: [],
@@ -143,6 +168,13 @@ function deepCompare(obj1, obj2, path = '$', options = {}) {
   return changes;
 }
 
+/**
+ * Produce a unified, patch-like text representation of the detected changes between two inputs.
+ *
+ * @param {object} changes - Diff object containing arrays: `added`, `removed`, and `changed`. Each entry in `added`/`removed` is `{ path, value }`; each entry in `changed` is `{ path, old, new }`.
+ * @param {string} file1 - Label or path used as the "original" header in the unified output.
+ * @param {string} file2 - Label or path used as the "updated" header in the unified output.
+ * @returns {string} A newline-separated unified diff where removed lines start with `- `, added lines start with `+ `, and changed items are represented by an adjacent removed (`-`) and added (`+`) line; includes header lines for both inputs.
 function formatUnified(changes, file1, file2) {
   const lines = [];
   lines.push(`--- ${file1}`);
@@ -165,6 +197,15 @@ function formatUnified(changes, file1, file2) {
   return lines.join('\n');
 }
 
+/**
+ * Execute the CLI: parse arguments, load two JSON inputs, perform a deep comparison, and emit results.
+ *
+ * Validates that two inputs are provided, reads each input from the filesystem if the path exists or parses it as a JSON string otherwise, then runs the deepCompare routine with the parsed options. Outputs either a unified patch or a JSON summary and writes errors as JSON to stderr.
+ *
+ * Side effects:
+ * - Writes results to stdout and errors/usage to stderr.
+ * - Calls process.exit with codes: 0 when inputs are identical, 1 when differences are found or usage is incorrect, and 2 on unexpected errors.
+ */
 function main() {
   const options = parseArgs();
 

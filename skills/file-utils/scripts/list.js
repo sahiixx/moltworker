@@ -14,6 +14,17 @@ const path = require('path');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments and produce an options object for the listing script.
+ *
+ * Recognizes `--recursive` / `-r`, `--tree` (which also enables recursive), `--hidden`, and `--json`. A single non-option argument sets the target path. Defaults: path `'.'`, `recursive: false`, `tree: false`, `hidden: false`, `json: false`.
+ * @returns {{path: string, recursive: boolean, tree: boolean, hidden: boolean, json: boolean}} An options object where:
+ *  - `path` is the target filesystem path,
+ *  - `recursive` indicates whether to traverse subdirectories,
+ *  - `tree` indicates tree-style output (also implies `recursive`),
+ *  - `hidden` controls inclusion of hidden files,
+ *  - `json` selects JSON output.
+ */
 function parseArgs() {
   const result = {
     path: '.',
@@ -41,6 +52,21 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Produce a flat array of file and directory metadata for the given directory, optionally recursing into subdirectories.
+ * @param {string} dirPath - Filesystem path of the directory to list.
+ * @param {Object} options - Listing options.
+ * @param {boolean} [options.recursive=false] - If true, include contents of subdirectories.
+ * @param {boolean} [options.hidden=false] - If true, include entries whose names start with a dot.
+ * @param {number} [depth=0] - Current recursion depth (used for item `depth` metadata).
+ * @returns {Array<Object>} Array of item objects with properties:
+ *   - `name` {string} — entry base name.
+ *   - `path` {string} — absolute or resolved path to the entry.
+ *   - `type` {'directory'|'file'} — entry type.
+ *   - `size` {number} — size in bytes.
+ *   - `modified` {string} — ISO 8601 timestamp of last modification.
+ *   - `depth` {number} — nesting depth relative to the initial call.
+ */
 function listDir(dirPath, options, depth = 0) {
   const results = [];
 
@@ -75,6 +101,18 @@ function listDir(dirPath, options, depth = 0) {
   return results;
 }
 
+/**
+ * Render and print a hierarchical tree view of filesystem items to the console.
+ *
+ * Prints a multi-level tree using Unicode connectors and icons (📁 for directories, 📄 for files).
+ *
+ * @param {Array<Object>} items - Array of item objects describing files and directories.
+ *   Each item must include:
+ *     - {string} name - Base name to display.
+ *     - {string} path - Full path used for determining parent/child relationships.
+ *     - {string} type - Either `"directory"` or `"file"`.
+ *     - {number} depth - Depth level (0 for root items).
+ */
 function printTree(items) {
   const byPath = new Map();
   items.forEach(item => byPath.set(item.path, item));
@@ -121,6 +159,14 @@ function printTree(items) {
   printLevel('', items);
 }
 
+/**
+ * Print a simple indented listing of filesystem items to stdout.
+ * @param {Array<Object>} items - Array of item objects to print. Each item should include:
+ *   - `name` {string} : display name of the item.
+ *   - `type` {'directory'|'file'} : item kind; directories show a folder icon, files show a file icon.
+ *   - `size` {number} : size in bytes (used only for files).
+ *   - `depth` {number} : nesting level used to determine indentation.
+ */
 function printList(items) {
   for (const item of items) {
     const icon = item.type === 'directory' ? '📁' : '📄';
@@ -130,12 +176,23 @@ function printList(items) {
   }
 }
 
+/**
+ * Convert a byte count into a human-readable string using B, KB, or MB units.
+ * @param {number} bytes - The size in bytes.
+ * @return {string} The formatted size: bytes with 'B' for values < 1024, kilobytes with one decimal and 'KB' for values < 1,048,576, or megabytes with one decimal and 'MB' otherwise.
+ */
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * Execute the command-line entrypoint: parse arguments, collect directory items, and print output.
+ *
+ * Validates the target path and, if missing, logs an error and exits the process with code 1.
+ * Depending on parsed options, prints the collected items as JSON, a tree view, or an indented list.
+ */
 function main() {
   const options = parseArgs();
   const targetPath = path.resolve(options.path);

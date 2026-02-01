@@ -10,6 +10,15 @@ const os = require('os');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments into an options object for the process list tool.
+ *
+ * @returns {{sort: string, limit: number, filter: string|null, tree: boolean}} An options object:
+ * - sort: field to sort by (defaults to "memory").
+ * - limit: maximum number of processes to return (defaults to 20).
+ * - filter: lowercase substring to filter process commands by, or `null` if none provided.
+ * - tree: `true` when the `--tree` flag is present, otherwise `false`.
+ */
 function parseArgs() {
   const result = {
     sort: 'memory',
@@ -36,6 +45,22 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Retrieve a list of running processes for the current platform.
+ *
+ * @returns {Array<Object>} An array of process objects. Each object may contain:
+ * - `pid` {number} - Process ID.
+ * - `command` {string} - Command or executable name.
+ * - `user` {string} - Owning user (when available).
+ * - `cpu` {number} - CPU usage percentage (when available).
+ * - `memory` {number} - Memory usage percentage of total system memory (when available).
+ * - `vsz` {number} - Virtual memory size in bytes (when available).
+ * - `rss` {number} - Resident set size in bytes.
+ * - `state` {string} - Process state/flags (when available).
+ * - `started` {string} - Process start time (when available).
+ * - `time` {string} - Cumulative CPU time (when available).
+ * - `note` {string} - Optional note included on fallback when full process info is unavailable.
+ */
 function getProcesses() {
   const platform = os.platform();
   const processes = [];
@@ -109,6 +134,11 @@ function getProcesses() {
   return processes;
 }
 
+/**
+ * Convert a byte count into a human-readable string using units B, KB, MB, and GB.
+ * @param {number} bytes - The size in bytes.
+ * @returns {string} Formatted size with one decimal place and an appropriate unit (e.g., "0 B", "1.2 KB", "3.4 MB").
+ */
 function formatBytes(bytes) {
   if (bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -120,6 +150,12 @@ function formatBytes(bytes) {
   return `${bytes.toFixed(1)} ${units[i]}`;
 }
 
+/**
+ * Collects, filters, sorts, limits, and formats the current process list, then writes the result as JSON to stdout.
+ *
+ * The printed JSON includes a timestamp, the number of returned processes, the applied sort option, and an array of process objects
+ * augmented with `rssFormatted` (human-readable RSS) and `commandShort` (truncated command).
+ */
 function main() {
   const options = parseArgs();
 

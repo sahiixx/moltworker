@@ -11,6 +11,18 @@ const path = require('path');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments into a configuration object for the hashing operation.
+ *
+ * Recognizes the following options from the global `args` array:
+ * --algorithm <name>, --encoding <name>, --file, --hmac <key>, and a single non-flag argument treated as input data.
+ * @returns {{data: string, algorithm: string, encoding: string, isFile: boolean, hmacKey: string|null}} Configuration object:
+ * - data: input string or file path (empty string if not provided).
+ * - algorithm: hash algorithm name (default "sha256").
+ * - encoding: output encoding name (default "hex").
+ * - isFile: true if the input should be treated as a file path.
+ * - hmacKey: HMAC key string when provided, otherwise `null`.
+ */
 function parseArgs() {
   const result = {
     data: '',
@@ -40,6 +52,15 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Parse command-line options, compute a hash or HMAC for the provided input, and print a JSON result.
+ *
+ * Parses CLI arguments, reads input either as a raw string or from a file when `--file` is used,
+ * computes a hash or HMAC using the specified algorithm and encoding, and writes a JSON object
+ * to stdout with the following fields: `type`, `algorithm`, `encoding`, `hash`, `inputLength`,
+ * and `file` (when input was a file). On missing input or runtime errors, prints a JSON error
+ * object to stderr and exits with code 1.
+ */
 function main() {
   const options = parseArgs();
 

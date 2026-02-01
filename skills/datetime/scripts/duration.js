@@ -8,6 +8,18 @@
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments and extract start, end, and unit options.
+ *
+ * Parses a global `args` array, treating the first two non-option values as
+ * the `start` and `end` positional arguments and reading a `--unit` option
+ * when provided.
+ *
+ * @returns {{start: string, end: string, unit: string}} An object with:
+ *  - `start`: the first positional argument or an empty string,
+ *  - `end`: the second positional argument or an empty string,
+ *  - `unit`: the unit option value (defaults to `'auto'`; common values include `'auto'`, `'days'`, `'hours'`, `'minutes'`, `'seconds'`).
+ */
 function parseArgs() {
   const result = {
     start: '',
@@ -32,6 +44,12 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Parse a date string into a JavaScript Date object.
+ * @param {string} str - The input date string to parse.
+ * @returns {Date} The parsed Date object.
+ * @throws {Error} If the input string does not produce a valid date.
+ */
 function parseDate(str) {
   const date = new Date(str);
   if (isNaN(date.getTime())) {
@@ -40,6 +58,12 @@ function parseDate(str) {
   return date;
 }
 
+/**
+ * Format a duration given in milliseconds into a human-readable string.
+ * @param {number} ms - Duration in milliseconds; negative values produce a leading `-` indicating the past.
+ * @param {string} unit - Desired output unit: `'auto'` (default) to choose an appropriate compound unit, or one of `'days'`, `'hours'`, `'minutes'`, `'seconds'` to force a specific unit.
+ * @returns {string} A formatted duration string (signed if `ms` is negative), e.g. "2 days, 3 hours", "5 hours", "30 minutes", or "45 seconds".
+ */
 function formatDuration(ms, unit) {
   const seconds = Math.abs(ms) / 1000;
   const minutes = seconds / 60;
@@ -84,6 +108,18 @@ function formatDuration(ms, unit) {
   return `${sign}${Math.round(Math.abs(seconds))} seconds`;
 }
 
+/**
+ * Parse command-line arguments, compute the duration between two dates, and print a structured JSON summary.
+ *
+ * If required positional arguments are missing, prints usage information to stderr and exits with code 1.
+ * On invalid date inputs or other runtime errors, prints an error message to stderr and exits with code 1.
+ *
+ * The printed JSON includes:
+ * - start: original input string and ISO representation
+ * - end: original input string and ISO representation
+ * - duration: human-readable string, milliseconds, seconds, minutes, hours, and days
+ * - direction: "future" if the end is the same or after the start, otherwise "past"
+ */
 function main() {
   const options = parseArgs();
 

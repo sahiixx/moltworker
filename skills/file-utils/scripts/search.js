@@ -13,6 +13,18 @@ const path = require('path');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse CLI arguments into an options object for the search utility.
+ *
+ * Parses positional arguments and flags from the global `args` array into an object describing the base path, search pattern, search mode, case sensitivity, and maximum results.
+ *
+ * @returns {{path: string, pattern: string, content: boolean, ignoreCase: boolean, max: number}} Options extracted from CLI arguments:
+ * - `path`: base path to search (defaults to '.').
+ * - `pattern`: search pattern; if only one positional argument is provided it is treated as the pattern and `path` becomes '.'.
+ * - `content`: `true` to search file contents (`--content`), `false` to search filenames.
+ * - `ignoreCase`: `true` when case-insensitive matching is requested (`--ignore-case` or `-i`).
+ * - `max`: maximum number of results (`--max <n>`, defaults to 100).
+ */
 function parseArgs() {
   const result = {
     path: '.',
@@ -48,6 +60,13 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Recursively traverses a directory tree and invokes a callback for each file found.
+ *
+ * Skips entries whose names start with '.' and directories named 'node_modules'; unreadable directories are silently ignored.
+ * @param {string} dir - The directory path to walk.
+ * @param {(filePath: string) => void} callback - Function called for each file with the file's full path.
+ */
 function walkDir(dir, callback) {
   try {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -69,6 +88,13 @@ function walkDir(dir, callback) {
   }
 }
 
+/**
+ * Find files under the given base path whose basenames match the provided pattern.
+ * @param {string} basePath - Root directory to search.
+ * @param {string} pattern - Regular expression pattern used to test filenames.
+ * @param {{ignoreCase?: boolean, max: number}} options - Search options: `ignoreCase` enables case-insensitive matching; `max` caps the number of results.
+ * @returns {{file: string, name: string}[]} Array of matching entries, each containing the full file path (`file`) and the filename (`name`).
+ */
 function searchFilenames(basePath, pattern, options) {
   const results = [];
   const regex = new RegExp(pattern, options.ignoreCase ? 'i' : '');
@@ -88,6 +114,15 @@ function searchFilenames(basePath, pattern, options) {
   return results;
 }
 
+/**
+ * Searches all text files under a base path for lines that match the given regex pattern and returns matching line entries.
+ *
+ * @param {string} basePath - Root directory to traverse for files.
+ * @param {string} pattern - Regular expression pattern string to test against each file line.
+ * @param {Object} options - Search options.
+ * @param {boolean} options.ignoreCase - If true, perform case-insensitive matching.
+ * @param {number} options.max - Maximum number of match results to collect.
+ * @returns {Array<Object>} An array of match objects: `{ file: string, line: number, content: string }` where `file` is the file path, `line` is the 1-based line number, and `content` is the trimmed line truncated to 200 characters.
 function searchContent(basePath, pattern, options) {
   const results = [];
   const regex = new RegExp(pattern, options.ignoreCase ? 'gi' : 'g');
@@ -119,6 +154,11 @@ function searchContent(basePath, pattern, options) {
   return results;
 }
 
+/**
+ * Parse command-line arguments, perform the requested search (filenames or file contents), and print a JSON summary of matches.
+ *
+ * If the pattern argument is missing, prints usage information and exits with code 1. If the resolved base path does not exist, prints an error and exits with code 1. On success, writes a JSON object to stdout containing the search pattern, search type, resolved path, matches array, match count, and a `truncated` flag.
+ */
 function main() {
   const options = parseArgs();
 

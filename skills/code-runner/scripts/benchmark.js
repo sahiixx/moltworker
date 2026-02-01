@@ -12,6 +12,15 @@ const os = require('os');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments into a benchmark configuration object.
+ * @returns {{code: string, lang: string, iterations: number, warmup: number, file: string|null}} An object with:
+ * - `code`: inline code string (empty if none),
+ * - `lang`: language key (default 'js'),
+ * - `iterations`: number of benchmark iterations,
+ * - `warmup`: number of warmup runs,
+ * - `file`: path to a code file or `null` if not provided.
+ */
 function parseArgs() {
   const result = {
     code: '',
@@ -42,6 +51,15 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Resolve runtime configuration for a given language key.
+ * @param {string} lang - Language identifier (e.g., 'js', 'javascript', 'py', 'python').
+ * @returns {{cmd: string, ext: string, name: string}} Configuration object:
+ *  - `cmd`: command to invoke the language runtime,
+ *  - `ext`: file extension to use for temporary benchmark files,
+ *  - `name`: human-readable language name.
+ * The JavaScript configuration is returned when `lang` is not recognized.
+ */
 function getLanguageConfig(lang) {
   const configs = {
     js: { cmd: 'node', ext: '.js', name: 'javascript' },
@@ -52,6 +70,15 @@ function getLanguageConfig(lang) {
   return configs[lang] || configs.js;
 }
 
+/**
+ * Create a language-specific wrapper that executes the given code snippet the specified number of times and prints a JSON array of per-iteration durations (milliseconds).
+ *
+ * @param {string} code - The code snippet to benchmark. For Python snippets, multi-line code will be indented to fit the wrapper.
+ * @param {string} lang - Language identifier: 'js'|'javascript' for Node.js or 'py'|'python' for Python.
+ * @param {number} iterations - Number of iterations to run the snippet.
+ * @returns {string} The wrapped source code ready to be executed by the language runtime; when run it writes a JSON array of per-iteration times (ms) to stdout.
+ * @throws {Error} If the specified language is not supported.
+ */
 function wrapCodeForBenchmark(code, lang, iterations) {
   if (lang === 'js' || lang === 'javascript') {
     return `
@@ -90,6 +117,18 @@ print(json.dumps(times))
   throw new Error(`Benchmarking not supported for language: ${lang}`);
 }
 
+/**
+ * Compute summary statistics from an array of timing values.
+ * @param {number[]} times - Array of numeric time measurements (e.g., milliseconds).
+ * @returns {{min: number, max: number, mean: number, median: number, stdDev: number, p95: number, p99: number}} An object containing:
+ *  - min: smallest value rounded to two decimals,
+ *  - max: largest value rounded to two decimals,
+ *  - mean: arithmetic mean rounded to two decimals,
+ *  - median: median value rounded to two decimals,
+ *  - stdDev: population standard deviation rounded to two decimals,
+ *  - p95: 95th percentile value rounded to two decimals,
+ *  - p99: 99th percentile value rounded to two decimals.
+ */
 function calculateStats(times) {
   const sorted = [...times].sort((a, b) => a - b);
   const n = times.length;
@@ -119,6 +158,14 @@ function calculateStats(times) {
   };
 }
 
+/**
+ * Execute benchmark code in a temporary file using the specified language runtime and return per-iteration timings.
+ *
+ * @param {string} code - The source code to run inside the benchmark wrapper.
+ * @param {{ cmd: string, ext: string }} config - Runtime configuration: `cmd` is the executable to invoke (e.g., "node", "python3"); `ext` is the file extension to use for the temporary file (e.g., ".js", ".py").
+ * @param {number} iterations - The number of iterations the benchmark wrapper is expected to execute (used by the provided code wrapper).
+ * @returns {number[]} An array of per-iteration durations in milliseconds.
+ */
 async function runBenchmark(code, config, iterations) {
   return new Promise((resolve, reject) => {
     const tempFile = path.join(os.tmpdir(), `bench_${Date.now()}${config.ext}`);
@@ -166,6 +213,11 @@ async function runBenchmark(code, config, iterations) {
   });
 }
 
+/**
+ * Execute the CLI benchmark workflow: parse arguments, load code, run optional warmup and measured iterations, compute statistics, and emit results.
+ *
+ * Loads code from an inline argument or a file, selects the runtime for the requested language, performs warmup runs when configured, executes the benchmark iterations, computes statistical metrics, prints a JSON results object to stdout, and on failure prints a JSON error object to stderr and exits with a non-zero status.
+ */
 async function main() {
   const options = parseArgs();
 

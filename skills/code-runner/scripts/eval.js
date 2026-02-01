@@ -7,6 +7,11 @@
 
 const args = process.argv.slice(2);
 
+/**
+ * Build an expression from CLI arguments, evaluate it inside a restricted context, and print a JSON payload describing the result.
+ *
+ * The printed JSON contains `expression`, `result`, `type`, and `timestamp`. If evaluation fails, a JSON object with `expression`, `error`, and `type` is printed and the process exits with code 1. The process also exits with code 1 when no expression is provided.
+ */
 function main() {
   const expression = args.join(' ');
 

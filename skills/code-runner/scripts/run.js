@@ -12,6 +12,22 @@ const os = require('os');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line tokens into execution options for running a code snippet.
+ *
+ * Parses tokens from the surrounding `args` array and returns an options object
+ * with fields controlling code content, language, source file, timeout, stdin,
+ * CLI arguments, and environment variables.
+ *
+ * @returns {{code: string, lang: string|null, file: string|null, timeout: number, stdin: string|null, args: string[], env: Object}} An options object:
+ * - `code`: inline code string (if provided).
+ * - `lang`: lowercased language identifier or `null`.
+ * - `file`: path to a file containing code or `null`.
+ * - `timeout`: execution timeout in milliseconds.
+ * - `stdin`: data to feed to the program's stdin or `null`.
+ * - `args`: array of additional CLI arguments for the executed program.
+ * - `env`: object of environment variables to merge with the current environment.
+ */
 function parseArgs() {
   const result = {
     code: '',
@@ -50,6 +66,11 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Resolve a language identifier to its execution configuration.
+ * @param {string} lang - Language identifier such as "js", "javascript", "node", "ts", "typescript", "python", "py", "python3", "bash", "sh", or "shell".
+ * @returns {{cmd: string, ext: string, name: string, cmdArgs?: string[]}|null} The execution configuration object for the specified language, or `null` if the language is unsupported.
+ */
 function getLanguageConfig(lang) {
   const configs = {
     js: { cmd: 'node', ext: '.js', name: 'javascript' },
@@ -68,6 +89,30 @@ function getLanguageConfig(lang) {
   return configs[lang] || null;
 }
 
+/**
+ * Execute source code using a language-specific runtime and return a structured execution result.
+ *
+ * @param {string} code - The source code to write to a temporary file and execute.
+ * @param {{cmd: string, ext: string, name: string, cmdArgs?: string[]}} config - Language execution configuration:
+ *   - cmd: command to run (e.g., "node", "python3"),
+ *   - ext: file extension to use for the temporary file (e.g., ".js", ".py"),
+ *   - name: human-friendly language name,
+ *   - cmdArgs: optional extra arguments that precede the temp file path.
+ * @param {{timeout: number, args?: string[], stdin?: string, env?: Object}} options - Execution options:
+ *   - timeout: maximum runtime in milliseconds,
+ *   - args: additional command-line arguments to pass after the temp file,
+ *   - stdin: data to write to the child process's standard input,
+ *   - env: additional environment variables to merge with the current process env.
+ * @returns {{success: boolean, language: string, exitCode: number|null, stdout: string, stderr: string, duration: number, timedOut: boolean, error: string|null}} An object describing the execution:
+ *   - success: `true` when the process exited with code 0 and did not time out, `false` otherwise,
+ *   - language: the human-friendly language name from `config.name`,
+ *   - exitCode: the process exit code, or `null` if the run timed out,
+ *   - stdout: trimmed standard output captured from the process,
+ *   - stderr: trimmed standard error captured from the process,
+ *   - duration: execution time in milliseconds,
+ *   - timedOut: `true` if the process was terminated due to timeout,
+ *   - error: informational error message for timeouts or failures, or `null` when none.
+ */
 async function runCode(code, config, options) {
   return new Promise((resolve) => {
     const tempDir = os.tmpdir();
@@ -151,6 +196,11 @@ async function runCode(code, config, options) {
   });
 }
 
+/**
+ * Parse command-line options, run the provided code (inline or from a file) using the chosen language runtime, print the execution result as JSON to stdout, and exit with 0 on success or 1 on failure.
+ *
+ * Validates required flags and inputs, selects the language runtime, enforces timeout and environment options, executes the code, and reports outcome including stdout, stderr, exit code, duration, and any error information.
+ */
 async function main() {
   const options = parseArgs();
 

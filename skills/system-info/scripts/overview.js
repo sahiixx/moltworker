@@ -10,6 +10,11 @@ const fs = require('fs');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line options for output format and specific section selection.
+ *
+ * @returns {{format: string, section: string|null}} Object with `format` set to the requested output format (default `"json"`) and `section` set to the requested section name or `null` if none provided.
+ */
 function parseArgs() {
   const result = {
     format: 'json',
@@ -29,6 +34,15 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Collects CPU metadata and computes the overall CPU usage percentage across all cores.
+ *
+ * @returns {{model: string, cores: number, speed: number, usage: number}} An object containing CPU information:
+ * - `model`: CPU model string (or `'Unknown'` if unavailable).
+ * - `cores`: number of logical CPU cores.
+ * - `speed`: clock speed of the first CPU in MHz (or `0` if unavailable).
+ * - `usage`: overall CPU usage percentage across all cores, rounded to one decimal place.
+ */
 function getCpuUsage() {
   const cpus = os.cpus();
   let totalIdle = 0;
@@ -49,6 +63,18 @@ function getCpuUsage() {
   };
 }
 
+/**
+ * Gather current system memory metrics.
+ *
+ * @returns {Object} An object containing memory statistics.
+ * @property {number} total - Total system memory in bytes.
+ * @property {number} used - Used memory in bytes (total minus free).
+ * @property {number} free - Free memory in bytes.
+ * @property {number} usedPercent - Percentage of memory used, rounded to one decimal.
+ * @property {string} totalFormatted - Human-readable formatted total memory (e.g., "1.5 GB").
+ * @property {string} usedFormatted - Human-readable formatted used memory.
+ * @property {string} freeFormatted - Human-readable formatted free memory.
+ */
 function getMemoryInfo() {
   const total = os.totalmem();
   const free = os.freemem();
@@ -65,6 +91,12 @@ function getMemoryInfo() {
   };
 }
 
+/**
+ * Provide disk usage information for the root filesystem when available.
+ *
+ * On Linux this returns an object with numeric totals and human-readable strings; on other platforms or if retrieval fails it returns a note indicating the information is unavailable.
+ * @returns {{path: string, total: number, used: number, free: number, usedPercent: number, totalFormatted: string, usedFormatted: string, freeFormatted: string} | {note: string, available: false}}
+ */
 function getDiskInfo() {
   // This is a simplified version - full disk info requires native bindings
   try {
@@ -95,6 +127,16 @@ function getDiskInfo() {
   };
 }
 
+/**
+ * Collects non-internal network interface addresses available on the system.
+ * @returns {Array<Object>} An array of network address objects.
+ * Each object has the following properties:
+ * - name: the network interface name.
+ * - address: the IP address as a string.
+ * - family: address family (e.g., 'IPv4' or 'IPv6').
+ * - mac: the interface MAC address.
+ * - netmask: the netmask as a string.
+ */
 function getNetworkInfo() {
   const interfaces = os.networkInterfaces();
   const result = [];
@@ -118,6 +160,20 @@ function getNetworkInfo() {
   return result;
 }
 
+/**
+ * Collect basic operating system details and formatted uptime.
+ * @returns {Object} An object with OS information:
+ * - platform: the operating system platform.
+ * - release: OS release version.
+ * - arch: CPU architecture.
+ * - hostname: system hostname.
+ * - uptime: system uptime in seconds.
+ * - uptimeFormatted: human-readable uptime string.
+ * - type: operating system name.
+ * - version: OS version string or `'N/A'` if unavailable.
+ * - homedir: current user's home directory path.
+ * - tmpdir: system temporary directory path.
+ */
 function getOsInfo() {
   return {
     platform: os.platform(),
@@ -133,6 +189,17 @@ function getOsInfo() {
   };
 }
 
+/**
+ * Collects runtime details about the current Node.js process and environment.
+ * @returns {{node: string, v8: string, platform: string, arch: string, pid: number, cwd: string, execPath: string}} An object containing runtime information:
+ * - `node`: Node.js version string (e.g., "v18.12.1").
+ * - `v8`: V8 engine version string.
+ * - `platform`: Operating system platform (process.platform).
+ * - `arch`: CPU architecture (process.arch).
+ * - `pid`: Current process ID.
+ * - `cwd`: Current working directory path.
+ * - `execPath`: Absolute path to the Node.js executable.
+ */
 function getRuntimeInfo() {
   return {
     node: process.version,
@@ -145,6 +212,11 @@ function getRuntimeInfo() {
   };
 }
 
+/**
+ * Convert a byte count into a human-readable string using units B–TB.
+ * @param {number} bytes - Number of bytes.
+ * @return {string} Human-readable size with two decimal places and unit (e.g. "1.50 GB").
+ */
 function formatBytes(bytes) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
@@ -155,6 +227,11 @@ function formatBytes(bytes) {
   return `${bytes.toFixed(2)} ${units[i]}`;
 }
 
+/**
+ * Format an uptime duration given in seconds into a compact human-readable string.
+ * @param {number} seconds - Uptime duration in seconds.
+ * @returns {string} A string with days (`d`), hours (`h`), and minutes (`m`) as needed (e.g. `1d 2h 3m`), or `"< 1m"` if under one minute.
+ */
 function formatUptime(seconds) {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
@@ -168,6 +245,17 @@ function formatUptime(seconds) {
   return parts.join(' ') || '< 1m';
 }
 
+/**
+ * Build a human-readable multi-section text summary from the provided system information.
+ * @param {Object} info - System information object containing os, cpu, memory, disk, network, and runtime sections.
+ * @param {Object} info.os - OS info with properties: platform, arch, release, hostname, and uptimeFormatted.
+ * @param {Object} info.cpu - CPU info with properties: model, cores, and usage.
+ * @param {Object} info.memory - Memory info with properties: totalFormatted, usedFormatted, freeFormatted, and usedPercent.
+ * @param {Object} info.disk - Disk info with properties: totalFormatted, usedFormatted, freeFormatted, usedPercent; may be { available: false } if not provided.
+ * @param {Array<Object>} info.network - Array of network interface objects with properties: name, address, and family.
+ * @param {Object} info.runtime - Runtime info with properties: node, v8, and pid.
+ * @returns {string} A multi-line, human-readable string summarizing the system information.
+ */
 function formatText(info) {
   const lines = [];
 
@@ -215,6 +303,11 @@ function formatText(info) {
   return lines.join('\n');
 }
 
+/**
+ * Gathers system information and writes it to stdout in JSON (default) or plain text.
+ *
+ * When a specific section is requested via CLI options, outputs only that section; otherwise outputs a full snapshot with a timestamp.
+ */
 function main() {
   const options = parseArgs();
 

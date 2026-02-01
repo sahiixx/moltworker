@@ -16,12 +16,19 @@ const crypto = require('crypto');
 const STORAGE_DIR = path.join(os.homedir(), '.moltbot', 'memory');
 const NOTES_FILE = path.join(STORAGE_DIR, 'notes.json');
 
+/**
+ * Ensure the configured storage directory exists, creating it (and any parents) if missing.
+ */
 function ensureStorageDir() {
   if (!fs.existsSync(STORAGE_DIR)) {
     fs.mkdirSync(STORAGE_DIR, { recursive: true });
   }
 }
 
+/**
+ * Load notes from disk, ensuring the storage directory exists first.
+ * @returns {Object} The notes data object containing a `notes` array. If the notes file is missing or cannot be parsed, returns `{ notes: [] }`.
+ */
 function loadNotes() {
   ensureStorageDir();
   if (fs.existsSync(NOTES_FILE)) {
@@ -34,11 +41,20 @@ function loadNotes() {
   return { notes: [] };
 }
 
+/**
+ * Persist the provided notes data to the configured notes file on disk.
+ * Ensures the storage directory exists before writing.
+ * @param {Object} data - Notes data to serialize and save (written as pretty-printed JSON).
+ */
 function saveNotes(data) {
   ensureStorageDir();
   fs.writeFileSync(NOTES_FILE, JSON.stringify(data, null, 2));
 }
 
+/**
+ * Generate a short random hexadecimal identifier.
+ * @returns {string} An 8-character lowercase hexadecimal string.
+ */
 function generateId() {
   return crypto.randomBytes(4).toString('hex');
 }
@@ -46,6 +62,14 @@ function generateId() {
 const args = process.argv.slice(2);
 const command = args[0];
 
+/**
+ * Parse the CLI command and execute the corresponding note operation.
+ *
+ * Loads persisted notes and handles the commands `add`, `list`, `search`, and `delete`,
+ * printing JSON-formatted results to stdout for successful operations and usage or error
+ * messages to stderr for invalid input. The function reads and writes the on-disk notes
+ * file and will exit the process with status 1 for missing/invalid arguments or unknown commands.
+ */
 function main() {
   if (!command) {
     console.error('Usage:');

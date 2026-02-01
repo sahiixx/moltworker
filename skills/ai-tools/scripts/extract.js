@@ -7,6 +7,17 @@
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments into an options object containing text, schema, and model.
+ *
+ * The function recognizes `--schema <value>` (attempts to JSON.parse the value and falls back to the raw string),
+ * `--model <value>` to override the default model, and treats the first non-flag argument as the text to process.
+ *
+ * @returns {{text: string, schema: Object|string|null, model: string}} An object with:
+ *  - `text`: the input text to process (empty string if not provided),
+ *  - `schema`: the parsed schema object if JSON was valid, the raw string if parsing failed, or `null` if absent,
+ *  - `model`: the model name (defaults to "claude-3-5-sonnet-20241022").
+ */
 function parseArgs() {
   const result = {
     text: '',
@@ -33,6 +44,18 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Extract structured data from unstructured text according to a provided schema.
+ *
+ * Sends the text and schema to an AI extraction API and returns the parsed JSON result
+ * (or a fallback object with the raw response and a parseError flag if parsing fails).
+ *
+ * @param {string} text - The unstructured text to extract data from.
+ * @param {Object|string} schema - The schema that describes the desired output shape; may be an object or a JSON string.
+ * @param {string} model - The model identifier to use for the API request.
+ * @returns {{extracted: any, model: string, usage: {input_tokens: number, output_tokens: number}}} The parsed extraction result (or a fallback object), the model used, and token usage.
+ * @throws {Error} If no API key is available in ANTHROPIC_API_KEY or AI_GATEWAY_API_KEY, or if the API responds with a non-ok status.
+ */
 async function extractStructured(text, schema, model) {
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_API_KEY;
   const baseUrl = process.env.AI_GATEWAY_BASE_URL || 'https://api.anthropic.com';
@@ -99,6 +122,11 @@ Return only the JSON object with extracted values. Use null for fields that cann
   };
 }
 
+/**
+ * Run the CLI: parse command-line arguments, validate required inputs, perform structured extraction, and print the result.
+ *
+ * Parses CLI arguments for the text to process, a JSON schema, and an optional model; if required inputs are missing it prints usage and exits with code 1. On success it prints the extraction result as pretty JSON to stdout; on failure it prints a JSON error object to stderr and exits with code 1.
+ */
 async function main() {
   const options = parseArgs();
 
