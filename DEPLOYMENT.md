@@ -435,4 +435,4 @@ npx wrangler secret list | grep R2
 - [Retell.ai Docs](https://docs.retell.ai/)
 - [Anthropic API](https://docs.anthropic.com/)
 
-**Contact**: +971 585476077
+**Contact**: your_contact_email_or_number
