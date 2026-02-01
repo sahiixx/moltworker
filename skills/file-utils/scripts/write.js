@@ -40,7 +40,7 @@ function parseArgs() {
 function main() {
   const options = parseArgs();
 
-  if (!options.path || !options.content) {
+  if (!options.path || options.content === undefined) {
     console.error('Usage: node write.js <path> <content> [OPTIONS]');
     console.error('Options:');
     console.error('  --append  Append to existing file');
