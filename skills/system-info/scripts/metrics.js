@@ -120,13 +120,14 @@ function collectMetrics() {
 /**
  * Format collected system and process metrics into a Prometheus exposition text block using the given prefix.
  *
- * @param {Object} metrics - Metrics object with the following sections and fields:
+ * `@param` {Object} metrics - Metrics object with the following sections and fields:
  *   - cpu: { usage_percent, cores, load_1m, load_5m, load_15m }
  *   - memory: { total_bytes, used_bytes, usage_percent }
  *   - process: { heap_used_bytes, heap_total_bytes, rss_bytes }
  *   - system: { uptime_seconds }
- * @param {string} prefix - Prefix to prepend to all metric names.
- * @returns {string} A Prometheus-formatted text block containing HELP/TYPE annotations and metric lines.
+ * `@param` {string} prefix - Prefix to prepend to all metric names.
+ * `@returns` {string} A Prometheus-formatted text block containing HELP/TYPE annotations and metric lines.
+ */
 function formatPrometheus(metrics, prefix) {
   const lines = [];
 
