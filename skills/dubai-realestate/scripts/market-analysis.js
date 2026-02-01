@@ -377,14 +377,15 @@ function generateAreaAnalysis(areaData, months) {
 
 /**
  * Generate qualitative market insights for an area using recent trend and key metrics.
- * @param {Object} areaData - Area metrics used to derive insights.
- * @param {number} areaData.rentalYield - Current rental yield percentage for the area.
- * @param {number} areaData.avgDaysOnMarket - Average days properties remain on market.
- * @param {Object} areaData.buyerProfile - Buyer composition percentages (e.g., { investor: 40, 'end-user': 60 }).
- * @param {Object} trend - Recent price trend summary.
- * @param {number} trend.periodMonths - Number of months the trend covers.
- * @param {number} trend.percentChange - Percentage price change over the period (can be negative).
- * @returns {Array<Object>} An array of insight objects, each with `type` (short tag) and `message` (human-readable explanation).
+ * `@param` {Object} areaData - Area metrics used to derive insights.
+ * `@param` {number} areaData.rentalYield - Current rental yield percentage for the area.
+ * `@param` {number} areaData.avgDaysOnMarket - Average days properties remain on market.
+ * `@param` {Object} areaData.buyerProfile - Buyer composition percentages (e.g., { investor: 40, 'end-user': 60 }).
+ * `@param` {Object} trend - Recent price trend summary.
+ * `@param` {number} trend.periodMonths - Number of months the trend covers.
+ * `@param` {number} trend.percentChange - Percentage price change over the period (can be negative).
+ * `@returns` {Array<Object>} An array of insight objects, each with `type` (short tag) and `message` (human-readable explanation).
+ */
 function generateInsights(areaData, trend) {
   const insights = [];
 
