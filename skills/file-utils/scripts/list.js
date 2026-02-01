@@ -177,14 +177,15 @@ function printList(items) {
 }
 
 /**
- * Convert a byte count into a human-readable string using B, KB, or MB units.
- * @param {number} bytes - The size in bytes.
- * @return {string} The formatted size: bytes with 'B' for values < 1024, kilobytes with one decimal and 'KB' for values < 1,048,576, or megabytes with one decimal and 'MB' otherwise.
+ * Convert a byte count into a human-readable string using B, KB, MB, or GB units.
+ * `@param` {number} bytes - The size in bytes.
+ * `@return` {string} The formatted size: bytes with 'B' for values < 1024, kilobytes with one decimal and 'KB' for values < 1,048,576, megabytes with one decimal and 'MB' for values < 1,073,741,824, or gigabytes with one decimal and 'GB' otherwise.
  */
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
 /**
