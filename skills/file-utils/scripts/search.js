@@ -117,12 +117,13 @@ function searchFilenames(basePath, pattern, options) {
 /**
  * Searches all text files under a base path for lines that match the given regex pattern and returns matching line entries.
  *
- * @param {string} basePath - Root directory to traverse for files.
- * @param {string} pattern - Regular expression pattern string to test against each file line.
- * @param {Object} options - Search options.
- * @param {boolean} options.ignoreCase - If true, perform case-insensitive matching.
- * @param {number} options.max - Maximum number of match results to collect.
- * @returns {Array<Object>} An array of match objects: `{ file: string, line: number, content: string }` where `file` is the file path, `line` is the 1-based line number, and `content` is the trimmed line truncated to 200 characters.
+ * `@param` {string} basePath - Root directory to traverse for files.
+ * `@param` {string} pattern - Regular expression pattern string to test against each file line.
+ * `@param` {Object} options - Search options.
+ * `@param` {boolean} options.ignoreCase - If true, perform case-insensitive matching.
+ * `@param` {number} options.max - Maximum number of match results to collect.
+ * `@returns` {Array<Object>} An array of match objects: `{ file: string, line: number, content: string }` where `file` is the file path, `line` is the 1-based line number, and `content` is the trimmed line truncated to 200 characters.
+ */
 function searchContent(basePath, pattern, options) {
   const results = [];
   const regex = new RegExp(pattern, options.ignoreCase ? 'gi' : 'g');
