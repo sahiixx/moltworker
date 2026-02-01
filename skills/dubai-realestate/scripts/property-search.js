@@ -378,7 +378,9 @@ function sortProperties(properties, sortBy, sortOrder) {
         comparison = a.sqft - b.sqft;
         break;
       case 'price-per-sqft':
-        comparison = (a.price / a.sqft) - (b.price / b.sqft);
+        const aPPS = a.sqft > 0 ? a.price / a.sqft : 0;
+        const bPPS = b.sqft > 0 ? b.price / b.sqft : 0;
+        comparison = aPPS - bPPS;
         break;
       default:
         comparison = a.price - b.price;
