@@ -57,12 +57,15 @@ function generateAESKey(bits = 256) {
 }
 
 function generateRSAKeyPair(bits = 2048) {
+  const validBits = [2048, 4096];
+  if (!validBits.includes(bits)) {
+    throw new Error(`Invalid RSA key size. Must be one of: ${validBits.join(', ')}`);
+  }
   const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
     modulusLength: bits,
     publicKeyEncoding: { type: 'spki', format: 'pem' },
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
   });
-
   return {
     type: 'rsa',
     bits,
