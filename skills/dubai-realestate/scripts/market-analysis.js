@@ -389,6 +389,10 @@ function generateAreaAnalysis(areaData, months) {
 function generateInsights(areaData, trend) {
   const insights = [];
 
+  if (!trend) {
+    return insights;
+  }
+
   // Price trend insight
   if (trend.percentChange > 10) {
     insights.push({
