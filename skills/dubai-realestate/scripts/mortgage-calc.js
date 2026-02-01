@@ -51,6 +51,23 @@ const MONTHLY_COSTS = {
   maintenance_reserve: 0.005 // 0.5% of property value annually
 };
 
+/**
+ * Parse command-line arguments into a normalized options object for mortgage and ROI calculations.
+ *
+ * @returns {Object} An options object with the following properties:
+ * - `price` {number|null} — property price (integer) parsed from `--price`/`-p`, or `null` if not provided.
+ * - `downPayment` {number} — down payment percentage parsed from `--down-payment`/`--dp` (default 25).
+ * - `years` {number} — loan term in years parsed from `--years`/`-y` (default 25).
+ * - `rate` {number} — annual interest rate parsed from `--rate`/`-r` (default 4.49).
+ * - `buyerType` {string} — buyer type parsed from `--buyer-type` (default `'expat'`).
+ * - `sqft` {number|null} — property area in square feet parsed from `--sqft`, or `null`.
+ * - `rentalYield` {number|null} — rental yield percentage parsed from `--rental-yield`, or `null`.
+ * - `appreciation` {number|null} — annual appreciation percentage parsed from `--appreciation`, or `null`.
+ * - `roi` {boolean} — set to `true` when `--roi` is present.
+ * - `compare` {boolean} — set to `true` when `--compare` is present.
+ * - `export` {boolean} — set to `true` when `--export`/`-e` is present.
+ * - `output` {string|null} — export file path parsed from `--output`/`-o`, or `null`.
+ */
 function parseArgs() {
   const result = {
     price: null,
@@ -117,6 +134,13 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Calculate the fixed monthly mortgage payment for a loan.
+ * @param {number} principal - Loan principal amount.
+ * @param {number} annualRate - Annual interest rate as a percentage (for example, 5 for 5%).
+ * @param {number} years - Loan term in years.
+ * @returns {number} The monthly payment amount rounded to two decimal places.
+ */
 function calculateMonthlyPayment(principal, annualRate, years) {
   const monthlyRate = annualRate / 100 / 12;
   const numPayments = years * 12;
@@ -131,6 +155,15 @@ function calculateMonthlyPayment(principal, annualRate, years) {
   return Math.round(payment * 100) / 100;
 }
 
+/**
+ * Generate an amortization summary and yearly breakdown for a fixed-rate loan.
+ * @returns {{monthlyPayment:number, totalPayments:number, totalInterest:number, totalPrincipal:number, yearlyBreakdown:Array<{year:number, principalPaid:number, interestPaid:number, remainingBalance:number, equityPercent:number}>}} An object containing:
+ * - `monthlyPayment`: fixed monthly payment amount.
+ * - `totalPayments`: sum of all monthly payments over the loan term.
+ * - `totalInterest`: total interest paid over the loan term (rounded).
+ * - `totalPrincipal`: total principal repaid over the loan term (rounded).
+ * - `yearlyBreakdown`: array of yearly summaries with `year` (year number), `principalPaid` (rounded principal paid that year), `interestPaid` (rounded interest paid that year), `remainingBalance` (rounded remaining loan balance at year end, minimum 0), and `equityPercent` (owner equity percentage at year end, rounded).
+ */
 function calculateAmortization(principal, annualRate, years) {
   const monthlyRate = annualRate / 100 / 12;
   const numPayments = years * 12;
@@ -178,6 +211,22 @@ function calculateAmortization(principal, annualRate, years) {
   };
 }
 
+/**
+ * Calculate Dubai transaction fees and fixed closing costs for a property purchase.
+ *
+ * @param {number} price - Property purchase price (AED).
+ * @param {number} loanAmount - Mortgage loan amount (AED).
+ * @returns {Object} Breakdown of transaction and closing costs.
+ * @returns {number} returns.dldFee - Dubai Land Department fee, rounded (AED).
+ * @returns {number} returns.agencyFee - Real estate agency fee, rounded (AED).
+ * @returns {number} returns.registrationFee - Title registration fee, rounded (AED).
+ * @returns {number} returns.mortgageRegistration - Mortgage registration fee based on loan, rounded (AED).
+ * @returns {number} returns.valuationFee - Fixed valuation fee (AED).
+ * @returns {number} returns.adminFees - Fixed administrative fees (AED).
+ * @returns {number} returns.total - Sum of all fees, rounded (AED).
+ * @returns {string} returns.totalFormatted - Total formatted as thousands with "K AED" suffix.
+ * @returns {number} returns.percentOfPrice - Total fees expressed as a percentage of the property price (one decimal place).
+ */
 function calculateTransactionCosts(price, loanAmount) {
   const dldFee = price * TRANSACTION_COSTS.dld_fee / 100;
   const agencyFee = price * TRANSACTION_COSTS.agency_fee / 100;
@@ -201,6 +250,12 @@ function calculateTransactionCosts(price, loanAmount) {
   };
 }
 
+/**
+ * Calculate monthly carrying costs for a property including service charge, insurance, and maintenance reserve.
+ * @param {number} price - Property price in AED.
+ * @param {number} [sqft] - Property area in square feet; when provided service charge is computed from sqft, otherwise a price-based fallback is used.
+ * @returns {{serviceCharge: number, insurance: number, maintenanceReserve: number, total: number, totalFormatted: string}} An object with each monthly cost rounded to whole AED, the rounded total, and a human-friendly formatted total (e.g., "1.2K AED").
+ */
 function calculateMonthlyCosts(price, sqft) {
   const serviceCharge = sqft ? sqft * MONTHLY_COSTS.service_charge_per_sqft.avg / 12 : price * 0.015 / 12;
   const insurance = price * MONTHLY_COSTS.insurance_rate / 12;
@@ -215,6 +270,23 @@ function calculateMonthlyCosts(price, sqft) {
   };
 }
 
+/**
+ * Analyze investment cash flow and generate a 5-year ROI and appreciation projection for a property using provided financing and market assumptions.
+ *
+ * @param {Object} options - Input parameters for the ROI calculation.
+ * @param {number} options.price - Purchase price of the property.
+ * @param {number} options.downPayment - Down payment as a percentage of price (e.g., 20 for 20%).
+ * @param {number} options.years - Mortgage tenure in years.
+ * @param {number} options.rate - Annual mortgage interest rate as a percentage (e.g., 4.5).
+ * @param {number} [options.rentalYield=6] - Expected gross annual rental yield as a percentage.
+ * @param {number} [options.appreciation=5] - Expected annual property appreciation as a percentage.
+ * @param {number} [options.sqft] - Property size in square feet (used to estimate certain monthly costs).
+ * @returns {Object} An analysis object containing:
+ *   - investment: financing and initial investment details (purchasePrice, downPayment, transactionCosts, totalInitialInvestment, loanAmount, interestRate, tenure).
+ *   - monthlyAnalysis: monthly cash flow summary (mortgagePayment, otherCosts, totalCost, rentalIncome, netCashflow, cashflowStatus).
+ *   - returns: yield and return metrics (grossRentalYield, netRentalYield, cashOnCashReturn, expectedAppreciation).
+ *   - projections: array of year-by-year projections for years 1–5 (year, propertyValue, appreciation, equity, cumulativeCashflow, totalReturn, roi).
+ */
 function calculateROI(options) {
   const {
     price,
@@ -293,6 +365,18 @@ function calculateROI(options) {
   };
 }
 
+/**
+ * Generate three predefined investment scenarios (Conservative, Moderate, Aggressive) and evaluate key metrics for each using the given base property price.
+ * @param {number} basePrice - The property price used as the basis for each scenario.
+ * @returns {Array<Object>} An array of scenario summaries. Each object contains:
+ *  - scenario {string} - Scenario name.
+ *  - assumptions {Object} - Scenario inputs (`downPayment`, `rate`, `appreciation`, `rentalYield`).
+ *  - initialInvestment {number} - Total initial cash invested for the scenario.
+ *  - monthlyPayment {number} - Calculated monthly mortgage payment.
+ *  - monthlyCashflow {number} - Net monthly cash flow after costs.
+ *  - year5ROI {number|undefined} - ROI percentage at year 5, if available.
+ *  - year5TotalReturn {number|undefined} - Total return amount at year 5, if available.
+ */
 function compareScenarios(basePrice) {
   const scenarios = [
     { name: 'Conservative', downPayment: 30, rate: 5.49, appreciation: 3, rentalYield: 5 },
@@ -322,6 +406,15 @@ function compareScenarios(basePrice) {
   });
 }
 
+/**
+ * Entry point for the CLI that parses arguments, runs the requested mortgage or ROI workflow, and outputs results as JSON.
+ *
+ * Parses command-line options, supports a help display, validates required inputs, and branches to one of:
+ * - scenario comparison,
+ * - ROI analysis,
+ * - basic mortgage calculation.
+ * The function prints the resulting JSON to stdout and, if requested, writes an export file. On validation failure or runtime error it writes an error JSON to stderr and exits the process with a non-zero code.
+ */
 function main() {
   const options = parseArgs();
 

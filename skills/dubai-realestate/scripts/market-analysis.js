@@ -206,6 +206,19 @@ const MARKET_DATA = {
   }
 };
 
+/**
+ * Parse process arguments into a structured options object for market analysis.
+ * @returns {{area: (string|null), areas: string[], months: number, report: boolean, trend: boolean, compare: boolean, export: boolean, output: (string|null), format: string}} An options object with:
+ *  - area: selected single area name or `null` if not specified.
+ *  - areas: list of area names when multiple areas are supplied.
+ *  - months: number of months to use for trend/analysis windows.
+ *  - report: `true` when a full market report was requested.
+ *  - trend: `true` when trend analysis was requested.
+ *  - compare: `true` when a multi-area comparison was requested.
+ *  - export: `true` when output should be written to a file.
+ *  - output: file path for exported output or `null` to use the default path.
+ *  - format: output format (e.g., `"json"`).
+ */
 function parseArgs() {
   const result = {
     area: null,
@@ -261,6 +274,11 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Retrieve area market data by name using case-insensitive and partial matching.
+ * @param {string} areaName - Area name or fragment to match against known areas.
+ * @returns {object|null} The matched area data augmented with a `name` property when found; `null` if no match.
+ */
 function getAreaData(areaName) {
   // Normalize area name
   for (const [key, data] of Object.entries(MARKET_DATA)) {
@@ -273,6 +291,11 @@ function getAreaData(areaName) {
   return null;
 }
 
+/**
+ * Analyze recent price movement and momentum from a series of monthly price records.
+ * @param {Array<{month: string, avgPrice: number, transactions?: number}>} priceHistory - Chronological array of monthly records; each record must include `avgPrice`.
+ * @param {number} [months=6] - Number of most recent months to evaluate.
+ * @returns {{periodMonths: number, startPrice: number, endPrice: number, absoluteChange: number, percentChange: number, momentum: 'accelerating'|'decelerating', trend: 'upward'|'downward'|'stable'}|null} An object summarizing the period, start/end prices, absolute and percent change (rounded to two decimals), momentum category, and classified trend; returns `null` if fewer than two months are available.
 function calculateTrend(priceHistory, months = 6) {
   const recentData = priceHistory.slice(-months);
   if (recentData.length < 2) return null;
@@ -298,6 +321,21 @@ function calculateTrend(priceHistory, months = 6) {
   };
 }
 
+/**
+ * Build a structured analysis report for a single area using its recent price history.
+ *
+ * @param {Object} areaData - Area dataset containing market metrics and historical monthly records (e.g., name, currentAvgPrice, currentPricePerSqft, rentalYield, avgDaysOnMarket, yearOverYearChange, quarterOverQuarterChange, totalTransactions2024, totalVolume2024, propertyTypes, bedroomDistribution, buyerProfile, priceHistory).
+ * @param {number} months - Number of most recent months to include from the area's monthly `priceHistory`.
+ * @returns {Object} An analysis object with:
+ *  - area: area name,
+ *  - asOfDate: report date string in `YYYY-MM-DD` format,
+ *  - currentMarket: key current metrics and formatted values,
+ *  - performance: year/quarter change and computed trend summary,
+ *  - activity: transaction and volume summary including avg and recent-period totals,
+ *  - demographics: property type, bedroom distribution, and buyer profile summaries,
+ *  - priceHistory: the most recent `months` entries from the area's monthly history,
+ *  - insights: qualitative insight objects derived from the area's metrics and trend.
+ */
 function generateAreaAnalysis(areaData, months) {
   const trend = calculateTrend(areaData.priceHistory, months);
   const recentHistory = areaData.priceHistory.slice(-months);
@@ -337,6 +375,16 @@ function generateAreaAnalysis(areaData, months) {
   };
 }
 
+/**
+ * Generate qualitative market insights for an area using recent trend and key metrics.
+ * @param {Object} areaData - Area metrics used to derive insights.
+ * @param {number} areaData.rentalYield - Current rental yield percentage for the area.
+ * @param {number} areaData.avgDaysOnMarket - Average days properties remain on market.
+ * @param {Object} areaData.buyerProfile - Buyer composition percentages (e.g., { investor: 40, 'end-user': 60 }).
+ * @param {Object} trend - Recent price trend summary.
+ * @param {number} trend.periodMonths - Number of months the trend covers.
+ * @param {number} trend.percentChange - Percentage price change over the period (can be negative).
+ * @returns {Array<Object>} An array of insight objects, each with `type` (short tag) and `message` (human-readable explanation).
 function generateInsights(areaData, trend) {
   const insights = [];
 
@@ -400,6 +448,16 @@ function generateInsights(areaData, trend) {
   return insights;
 }
 
+/**
+ * Compare multiple areas and produce ranked metrics plus a recommendation.
+ *
+ * @param {string[]} areas - Array of area names to include in the comparison; unknown or unmatched names are ignored.
+ * @returns {{areas: {name: string, avgPrice: number, pricePerSqft: number, yoyChange: number, rentalYield: number, daysOnMarket: number, transactions: number}[], rankings: {byValue: string[], byGrowth: string[], byYield: string[], byLiquidity: string[]}, recommendation: {bestOverall: (string|undefined), reason: string}}}
+ * An object with:
+ * - `areas`: per-area summaries containing market metrics.
+ * - `rankings`: arrays of area names ordered by value (price per sqft ascending), growth (YoY change descending), yield (rental yield descending), and liquidity (days on market ascending).
+ * - `recommendation`: the top-scoring area's name under `bestOverall` (may be undefined if no valid areas) and a short `reason`.
+ */
 function generateComparison(areas) {
   const comparison = {
     areas: [],
@@ -451,6 +509,20 @@ function generateComparison(areas) {
   return comparison;
 }
 
+/**
+ * Assemble a comprehensive market report for all areas using the in-memory 2024 dataset.
+ *
+ * The report includes aggregate market overview metrics, a per-area analysis array, a cross-area comparison,
+ * and lists of top performers by growth, yield, liquidity, and volume.
+ * @returns {object} The report object with properties:
+ *  - title: string
+ *  - generatedAt: ISO timestamp string
+ *  - period: string
+ *  - marketOverview: { totalVolume: string, totalTransactions: number, avgYoYGrowth: string, avgRentalYield: string }
+ *  - areaAnalyses: Array of per-area analysis objects
+ *  - comparison: comparison summary object
+ *  - topPerformers: { highestGrowth: string[], highestYield: string[], mostLiquid: string[], highestVolume: string[] }
+ */
 function generateFullReport() {
   const allAreas = Object.keys(MARKET_DATA);
   const report = {
@@ -476,6 +548,14 @@ function generateFullReport() {
   return report;
 }
 
+/**
+ * Orchestrates command-line parsing and produces the requested market analysis output.
+ *
+ * Parses CLI options, generates a full report, area analysis, multi-area comparison, or market overview,
+ * and emits the resulting payload as JSON to stdout. When the export option is used, writes the output
+ * to a file and attaches the exported path to the payload. On explicit help requests the function prints
+ * usage text and exits; on missing area or runtime errors it logs an error and exits with a non-zero code.
+ */
 function main() {
   const options = parseArgs();
 

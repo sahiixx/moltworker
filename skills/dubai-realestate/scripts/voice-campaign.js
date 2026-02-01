@@ -100,6 +100,23 @@ const RETELL_CONFIG = {
   }
 };
 
+/**
+ * Parse CLI arguments and return an options object for campaign generation.
+ *
+ * @returns {Object} Options for campaign creation.
+ * @property {string|null} segment - Uppercased segment filter (e.g., "A", "B"), or null if not provided.
+ * @property {string|null} leads - Path to a scored leads JSON file, or null to use defaults.
+ * @property {number} limit - Maximum number of leads to include.
+ * @property {string} name - Campaign name.
+ * @property {string} template - Script template key to use (e.g., "reactivation").
+ * @property {string} language - Language code for voice settings (e.g., "en", "ar").
+ * @property {boolean} export - Whether to write the generated campaign to disk.
+ * @property {string|null} output - Explicit output file path when exporting, or null to use defaults.
+ * @property {string|undefined} agentId - Agent identifier; defaults to process.env.RETELL_AGENT_ID when not supplied.
+ * @property {string|undefined} phoneNumber - From-phone number for calls; defaults to process.env.PHONE_NUMBER when not supplied.
+ * @property {string} company - Company display name used in scripts.
+ * @property {string} agentName - Agent display name used in scripts.
+ */
 function parseArgs() {
   const result = {
     segment: null,
@@ -166,6 +183,11 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Load scored leads from a provided JSON file path or from default locations.
+ * @param {string} [inputPath] - Optional path to a JSON file containing scored leads.
+ * @returns {Array|Object|null} The parsed leads: the `leads` array if present in the file, otherwise the parsed JSON object; `null` if no file was found.
+ */
 function loadScoredLeads(inputPath) {
   if (inputPath && fs.existsSync(inputPath)) {
     const data = JSON.parse(fs.readFileSync(inputPath, 'utf-8'));
@@ -188,6 +210,16 @@ function loadScoredLeads(inputPath) {
   return null;
 }
 
+/**
+ * Produce a personalized script object by replacing template placeholders with lead- and campaign-specific values.
+ *
+ * Populates placeholders such as `{name}`, `{full_name}`, `{preferred_area}`, `{property_type}`, `{agent_name}`, `{company}`, `{time_of_day}`, `{available_dates}`, `{price_range}`, `{rental_yield}`, `{appreciation_rate}`, and `{key_features}` within the template.
+ *
+ * @param {Object} template - Script template containing string fields and nested string fields with placeholders to replace.
+ * @param {Object} lead - Lead record (expected to include `name`, `preferredArea`, and `rfm` with optional `original` and `monetary` properties) used to fill personalization variables.
+ * @param {Object} options - Generation options (expects `agentName` and `company`) that are injected into the script.
+ * @returns {Object} The template object with all applicable placeholder strings replaced by lead- and option-derived values.
+ */
 function generatePersonalizedScript(template, lead, options) {
   const script = { ...template };
   const variables = {
@@ -221,10 +253,20 @@ function generatePersonalizedScript(template, lead, options) {
   return script;
 }
 
+/**
+ * Replace placeholders in the form `{key}` within a string using values from a variables map.
+ * @param {string} text - Input string containing placeholders like `{name}`.
+ * @param {Object<string,*>} variables - Mapping from placeholder names to replacement values.
+ * @returns {string} The text with each `{key}` substituted by `variables[key]` when present; placeholders without a matching key are left unchanged.
+ */
 function replaceVariables(text, variables) {
   return text.replace(/\{(\w+)\}/g, (match, key) => variables[key] || match);
 }
 
+/**
+ * Get the current time-of-day segment based on the local hour.
+ * @returns {'morning'|'afternoon'|'evening'} `'morning'` for hours before 12, `'afternoon'` for hours 12–16, `'evening'` for hours 17 and later.
+ */
 function getTimeOfDay() {
   const hour = new Date().getHours();
   if (hour < 12) return 'morning';
@@ -232,6 +274,10 @@ function getTimeOfDay() {
   return 'evening';
 }
 
+/**
+ * Produce a short string listing up to two upcoming day names for scheduling, skipping Fridays.
+ * @returns {string} The next one or two weekday names separated by " or " (e.g., "Monday or Tuesday"), or an empty string if none are available.
+ */
 function getAvailableDates() {
   const dates = [];
   const now = new Date();
@@ -245,6 +291,11 @@ function getAvailableDates() {
   return dates.slice(0, 2).join(' or ');
 }
 
+/**
+ * Format a numeric property price into a human-readable AED range.
+ * @param {number} value - The price in UAE dirhams.
+ * @returns {string} `competitive pricing` if `value` is falsy; otherwise a formatted range in AED, e.g. `1.2-1.4 million AED` for values >= 1,000,000 or `350K-420K AED` for smaller values.
+ */
 function formatPriceRange(value) {
   if (!value) return 'competitive pricing';
   const millions = value / 1000000;
@@ -254,6 +305,16 @@ function formatPriceRange(value) {
   return `${(value / 1000).toFixed(0)}K-${((value * 1.2) / 1000).toFixed(0)}K AED`;
 }
 
+/**
+ * Builds a Retell.ai campaign payload containing campaign metadata, per-lead call entries, and a summary.
+ *
+ * @param {Array<Object>} leads - Array of lead objects to include; expected fields include `id`, `name`, `phone`, `preferredArea`, and optional `rfm` data.
+ * @param {Object} options - Generation options. Relevant keys: `name` (campaign name), `template` (script template key), `language`, `phoneNumber` (from number), and `agentId`.
+ * @returns {Object} The campaign payload with three top-level properties:
+ *   - `campaign`: metadata (id, name, created_at, status, template, language, total_calls, settings).
+ *   - `calls`: array of per-call entries; each contains `call_id`, `to_number`, `from_number`, `agent_id`, `metadata`, `dynamic_variables`, `custom_script`, `voice_settings`, and `call_settings`.
+ *   - `summary`: aggregate information (`total_leads`, `segments`, `areas`, `estimated_duration`, `estimated_cost`).
+ */
 function generateRetellCampaign(leads, options) {
   const template = SCRIPT_TEMPLATES[options.template] || SCRIPT_TEMPLATES.reactivation;
   const voiceSettings = RETELL_CONFIG.voice_settings[options.language] || RETELL_CONFIG.voice_settings.en;
@@ -320,6 +381,13 @@ function generateRetellCampaign(leads, options) {
   };
 }
 
+/**
+ * Count leads grouped by their RFM segment.
+ *
+ * If a lead lacks an RFM segment, it is counted under the 'UNKNOWN' key.
+ * @param {Array<Object>} leads - Array of lead objects; each lead may include an `rfm.segment` string.
+ * @returns {Object<string, number>} An object mapping segment names to their respective lead counts.
+ */
 function groupBySegment(leads) {
   const groups = {};
   for (const lead of leads) {
@@ -329,6 +397,11 @@ function groupBySegment(leads) {
   return groups;
 }
 
+/**
+ * Count leads grouped by their preferred area.
+ * @param {Array<Object>} leads - Array of lead objects; leads without a `preferredArea` are counted under the key `"Unknown"`.
+ * @returns {Object<string, number>} An object mapping each area name to the number of leads for that area.
+ */
 function groupByArea(leads) {
   const groups = {};
   for (const lead of leads) {
@@ -338,6 +411,11 @@ function groupByArea(leads) {
   return groups;
 }
 
+/**
+ * Orchestrates CLI execution: parses options, loads and filters leads, builds a Retell.ai campaign, and outputs or exports the resulting JSON.
+ *
+ * Parses command-line arguments (including --help), attempts to load scored leads (falling back to a sample lead if none found), filters by segment and limit, generates a campaign payload using generateRetellCampaign, and writes the campaign JSON to stdout. When the --export flag is provided, writes the campaign to a file (creating directories as needed) and annotates the campaign with the export path. Prints help text and exits with code 0 when requested. On fatal conditions (no matching leads) or runtime errors, logs a JSON-formatted error to stderr and exits with code 1.
+ */
 function main() {
   const options = parseArgs();
 

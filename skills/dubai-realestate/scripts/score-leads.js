@@ -28,6 +28,23 @@ const SEGMENTS = {
   LOST: { rfm: '111,112,121,122,131,132,141,142', label: 'Lost', priority: 11 }
 };
 
+/**
+ * Parse CLI arguments into an options object for the scoring script.
+ *
+ * Parses recognized flags (input/output/segment/limit/export/recency-weight/frequency-weight/monetary-weight/format)
+ * and returns a normalized options object with defaults.
+ *
+ * @returns {{input: string|null, output: string|null, segment: string|null, limit: number|null, export: boolean, recencyWeight: number, frequencyWeight: number, monetaryWeight: number, format: string}} An options object:
+ * - input: input file path or null
+ * - output: output file path or null
+ * - segment: uppercase segment code or null
+ * - limit: numeric result limit or null
+ * - export: whether to export results
+ * - recencyWeight: weight for recency (default 0.35)
+ * - frequencyWeight: weight for frequency (default 0.30)
+ * - monetaryWeight: weight for monetary (default 0.35)
+ * - format: export format ('json' by default)
+ */
 function parseArgs() {
   const result = {
     input: null,
@@ -81,6 +98,11 @@ function parseArgs() {
   return result;
 }
 
+/**
+ * Map a last-contact date to a recency score and human-readable label.
+ * @param {(string|number|Date)} lastContactDate - Date of last contact (ISO string, timestamp, or Date).
+ * @returns {{score: number, days: number, label: string}} `score` from 1 to 5 (5 = most recent), `days` since last contact, and a descriptive `label`.
+ */
 function calculateRecencyScore(lastContactDate) {
   const now = new Date();
   const lastContact = new Date(lastContactDate);
@@ -94,6 +116,11 @@ function calculateRecencyScore(lastContactDate) {
   return { score: 1, days: daysSinceContact, label: 'Dormant' };
 }
 
+/**
+ * Assigns a frequency score and human-readable label based on the number of interactions.
+ * @param {number} interactionCount - Total interactions (calls, emails, viewings, inquiries).
+ * @returns {{score: number, count: number, label: string}} An object with `score` (1–5), the original `count`, and a descriptive `label` (`Highly Engaged`, `Engaged`, `Moderate`, `Low`, or `Minimal`).
+ */
 function calculateFrequencyScore(interactionCount) {
   // Interactions: calls, emails, viewings, inquiries
   if (interactionCount >= 15) return { score: 5, count: interactionCount, label: 'Highly Engaged' };
@@ -103,6 +130,11 @@ function calculateFrequencyScore(interactionCount) {
   return { score: 1, count: interactionCount, label: 'Minimal' };
 }
 
+/****
+ * Categorizes a monetary value into an RFM monetary score for Dubai real estate.
+ * @param {number} transactionValue - Transaction amount in AED.
+ * @returns {{score: number, value: number, label: string}} The monetary category: `score` (1–5), the original `value`, and a human-readable `label`.
+ ****/
 function calculateMonetaryScore(transactionValue) {
   // Dubai market: values in AED
   if (transactionValue >= 5000000) return { score: 5, value: transactionValue, label: 'Ultra High Value' };
@@ -112,6 +144,14 @@ function calculateMonetaryScore(transactionValue) {
   return { score: 1, value: transactionValue, label: 'Entry Level' };
 }
 
+/**
+ * Determine the RFM segment for given recency, frequency, and monetary scores.
+ *
+ * @param {number} r - Recency score (typically 1–5, higher is more recent).
+ * @param {number} f - Frequency score (typically 1–5, higher is more frequent).
+ * @param {number} m - Monetary score (typically 1–5, higher is higher value).
+ * @returns {{segment: string, label: string, priority: number}} An object with the segment key, human-readable label, and priority order. The function first tries to match a predefined RFM code set; if no exact match is found it assigns a fallback segment based on the total score.
+ */
 function determineSegment(r, f, m) {
   const rfmCode = `${r}${f}${m}`;
 
@@ -131,6 +171,15 @@ function determineSegment(r, f, m) {
   return { segment: 'HIBERNATING', label: 'Hibernating', priority: 10 };
 }
 
+/**
+ * Compute RFM scores for a lead, determine its segment, and return the lead enriched with RFM metadata.
+ * @param {Object} lead - Lead record. Expected fields (any of): id, name, email, phone, preferredArea, lastContactDate or lastContact, interactionCount or interactions, transactionValue or value or budget?.max.
+ * @param {Object} weights - Weight factors for score aggregation.
+ * @param {number} weights.recencyWeight - Weight applied to the recency score.
+ * @param {number} weights.frequencyWeight - Weight applied to the frequency score.
+ * @param {number} weights.monetaryWeight - Weight applied to the monetary score.
+ * @returns {Object} An object with lead metadata and an `rfm` block containing `recency`, `frequency`, and `monetary` score objects; `rfmCode` (string), `totalScore` (number), `weightedScore` (number, normalized and rounded), `segment` (internal key), `segmentLabel` (human-readable), `priority` (number), and the original lead under `original`.
+ */
 function scoreLead(lead, weights) {
   const recency = calculateRecencyScore(lead.lastContactDate || lead.lastContact || new Date().toISOString());
   const frequency = calculateFrequencyScore(lead.interactionCount || lead.interactions || 0);
@@ -165,6 +214,25 @@ function scoreLead(lead, weights) {
   };
 }
 
+/**
+ * Produce aggregate metrics and per-segment breakdowns for an array of scored leads.
+ *
+ * Takes scored lead objects (each containing an `rfm` block with `monetary`, `frequency`, `totalScore`, and `segment`) and returns overall totals and segmented summaries useful for reporting.
+ *
+ * @param {Array<Object>} scoredLeads - Array of scored lead objects produced by `scoreLead`, where each lead includes `id` and an `rfm` object with at least `{ monetary: { value }, frequency: { count }, totalScore, segment }`.
+ * @returns {Object} An object with overall totals and a `segments` map.
+ *   - totalLeads: total number of leads processed.
+ *   - totalValue: sum of monetary values across all leads (number, in AED).
+ *   - totalValueFormatted: human-readable string of `totalValue` in millions (e.g., "1.2M AED").
+ *   - avgInteractions: average interaction count per lead (number, rounded to one decimal).
+ *   - segments: object keyed by segment name; each value includes:
+ *       - count: number of leads in the segment.
+ *       - totalValue: sum of monetary values for the segment (number, in AED).
+ *       - avgScore: average total RFM score for the segment (number, rounded to two decimals).
+ *       - leads: array of lead IDs belonging to the segment.
+ *       - percentage: segment size as a percentage of total leads (integer).
+ *       - totalValueFormatted: human-readable string of the segment's total value in millions (e.g., "0.3M AED").
+ */
 function generateSummary(scoredLeads) {
   const segments = {};
   let totalValue = 0;
@@ -207,6 +275,11 @@ function generateSummary(scoredLeads) {
   };
 }
 
+/**
+ * Load leads from a provided JSON file or from common default locations, falling back to sample demo data.
+ * @param {string} [inputPath] - Path to a JSON file containing an array of leads; when omitted or not found the function will search common default locations.
+ * @returns {Object[]} An array of lead objects loaded from the first existing file found, or a built-in set of sample leads when no file is available.
+ */
 function loadLeads(inputPath) {
   // Try multiple data sources
   if (inputPath && fs.existsSync(inputPath)) {
@@ -281,6 +354,11 @@ function loadLeads(inputPath) {
   ];
 }
 
+/**
+ * Run the RFM lead scoring pipeline: parse CLI options, load leads, score and rank them, generate a summary, and emit the results.
+ *
+ * This function orchestrates the end-to-end process: it parses command-line arguments, loads input leads, computes recency/frequency/monetary scores, determines segments, sorts and optionally filters/limits results, assigns percentiles, builds a summary, and outputs the final payload. When the `--export` flag is used it writes the results to a file in JSON or CSV format. The function prints JSON to stdout and may write files to disk; it also exits the process on help or fatal errors.
+ */
 function main() {
   const options = parseArgs();
 

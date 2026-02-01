@@ -13,6 +13,19 @@ const path = require('path');
 
 const args = process.argv.slice(2);
 
+/**
+ * Parse command-line arguments into an options object used by the matching script.
+ *
+ * @returns {{leadId: string|null, segment: string|null, limit: number, minScore: number, notify: boolean, export: boolean, output: string|null}}
+ * An options object:
+ * - leadId: lead identifier if provided via `--lead-id` or `-l`, otherwise `null`.
+ * - segment: uppercased segment string from `--segment` or `-s`, otherwise `null`.
+ * - limit: maximum number of leads to process from `--limit` (default 20).
+ * - minScore: minimum match score threshold from `--min-score` (default 60).
+ * - notify: `true` when `--notify` or `-n` is present, otherwise `false`.
+ * - export: `true` when `--export` or `-e` is present, otherwise `false`.
+ * - output: custom export path from `--output` or `-o`, otherwise `null`.
+ */
 function parseArgs() {
   const result = {
     leadId: null,
@@ -120,6 +133,11 @@ const SAMPLE_PROPERTIES = [
   { id: 'PROP_006', area: 'Palm Jumeirah', subArea: 'Garden Homes', type: 'villa', beds: 6, baths: 7, sqft: 8500, price: 18000000, features: ['beach', 'pool', 'private-garden', 'atlantis-view', 'sea-view'], status: 'available' }
 ];
 
+/**
+ * Load saved leads or properties from known file locations, falling back to bundled sample data if no files are found.
+ * @param {string} type - Either `'leads'` or `'properties'` to select which dataset to load.
+ * @returns {Array<Object>} An array of lead objects when `type` is `'leads'`, or an array of property objects when `type` is `'properties'`. If a JSON file contains a top-level `leads` field, that field is returned; otherwise the parsed file contents are returned. If no file is found, returns the in-memory sample dataset.
+ */
 function loadData(type) {
   const defaultPaths = {
     leads: [path.join(__dirname, '../data/leads.json'), path.join(__dirname, '../output/scored-leads.json')],
@@ -136,6 +154,23 @@ function loadData(type) {
   return type === 'leads' ? SAMPLE_LEADS : SAMPLE_PROPERTIES;
 }
 
+/**
+ * Compute a normalized match percentage between a lead's preferences and a property.
+ *
+ * Evaluates area, property type, bedrooms, budget, and features (must-have and nice-to-have),
+ * and returns a percentage score with per-criterion details and a recommendation.
+ *
+ * @param {Object} lead - Lead object; expects a `preferences` object that may contain:
+ *   `area` (array of strings), `type` (string), `beds` ({min, max}), `budget` ({min, max}),
+ *   `mustHave` (array of strings), and `features` (array of strings).
+ * @param {Object} property - Property object; expects fields used for matching such as
+ *   `area`, `type`, `beds`, `price`, and `features` (array of strings).
+ * @returns {Object} An object containing:
+ *   - `score`: integer 0–100 representing the normalized match percentage,
+ *   - `maxScore`: numeric maximum possible score (100),
+ *   - `details`: array of per-criterion match entries with scores and reasons,
+ *   - `recommendation`: object describing action/priority derived from the score.
+ */
 function calculateMatchScore(lead, property) {
   const prefs = lead.preferences || {};
   let score = 0;
@@ -252,6 +287,11 @@ function calculateMatchScore(lead, property) {
   };
 }
 
+/**
+ * Map a numeric match score to a recommendation object.
+ * @param {number} score - Match score as a percentage (0–100).
+ * @returns {{level: string, action: string, priority: number}} An object with `level` (recommendation tier), `action` (suggested next step), and `priority` (numeric rank where 1 is highest).
+ */
 function getRecommendation(score) {
   if (score >= 90) return { level: 'excellent', action: 'Schedule viewing immediately', priority: 1 };
   if (score >= 75) return { level: 'strong', action: 'Send property details', priority: 2 };
@@ -260,6 +300,18 @@ function getRecommendation(score) {
   return { level: 'weak', action: 'Not recommended', priority: 5 };
 }
 
+/**
+ * Produce scored property matches for a single lead and return summarized results.
+ *
+ * @param {Object} lead - Lead object containing contact, rfm, and preferences used for matching.
+ * @param {Array<Object>} properties - Array of property objects to evaluate against the lead.
+ * @param {number} minScore - Minimum percent match (0–100) required for a property to be included.
+ * @returns {Object} An object with matching results:
+ *  - lead: basic lead info (id, name, phone, email, segment, preferences)
+ *  - matchCount: number of properties meeting the `minScore` threshold
+ *  - topMatches: up to five highest-scoring matches
+ *  - allMatches: all matches meeting the threshold, sorted by descending score
+ */
 function matchLeadToProperties(lead, properties, minScore) {
   const matches = properties
     .map(prop => {
@@ -297,6 +349,14 @@ function matchLeadToProperties(lead, properties, minScore) {
   };
 }
 
+/**
+ * Build a notification payload for a lead based on their top property matches.
+ *
+ * @param {Object} matchResult - Matching results for a single lead.
+ * @param {Object} matchResult.lead - Lead metadata used in messages (at least `name` and `phone`).
+ * @param {Array<Object>} matchResult.topMatches - Array of top match objects (may be empty). Each item must include `property` (with `beds`, `type`, `area`, `priceFormatted`) and `match` (with `score`).
+ * @returns {Object} A notification object. If no matches are found returns `{ type: 'no_matches', message, suggestion }`. If matches exist returns `{ type: 'match_found', leadName, leadPhone, matchScore, property, message, whatsappTemplate, callScript }`.
+ */
 function generateNotification(matchResult) {
   const { lead, topMatches } = matchResult;
 
@@ -321,6 +381,11 @@ function generateNotification(matchResult) {
   };
 }
 
+/**
+ * Orchestrates the CLI workflow: parse options, load data, compute lead-to-property matches, optionally generate notifications and export results, then print a JSON summary.
+ *
+ * Runs the end-to-end process using command-line flags to filter leads (by ID or segment), control limits and minimum score, enable notification generation, and enable exporting to a file. On help flags it prints usage and exits; on errors it prints an error JSON and exits with a non-zero status. When export is enabled, writes the JSON output to the specified or generated file path.
+ */
 function main() {
   const options = parseArgs();
 
