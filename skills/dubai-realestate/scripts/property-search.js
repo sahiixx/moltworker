@@ -294,8 +294,8 @@ function loadProperties() {
  * beds (exact or min/max), baths (minimum), price (min/max), size in sqft (min/max),
  * required features (case-insensitive substring match for each feature), and status.
  *
- * @param {Array<Object>} properties - Array of property objects to filter.
- * @param {Object} filters - Search filters. Expected keys include:
+ * `@param` {Array<Object>} properties - Array of property objects to filter.
+ * `@param` {Object} filters - Search filters. Expected keys include:
  *   - {string|null} area
  *   - {string|null} subArea
  *   - {string|null} type
@@ -309,7 +309,8 @@ function loadProperties() {
  *   - {number|null} maxSqft
  *   - {Array<string>} features - required features; each feature must match a property feature as a case-insensitive substring
  *   - {string|null} status
- * @returns {Array<Object>} The subset of `properties` that satisfy all specified filters.
+ * `@returns` {Array<Object>} The subset of `properties` that satisfy all specified filters.
+ */
 function searchProperties(properties, filters) {
   return properties.filter(prop => {
     // Area filter
