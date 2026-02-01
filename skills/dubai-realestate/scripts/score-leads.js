@@ -187,11 +187,12 @@ function scoreLead(lead, weights) {
 
   const segmentInfo = determineSegment(recency.score, frequency.score, monetary.score);
 
+  const weightSum = weights.recencyWeight + weights.frequencyWeight + weights.monetaryWeight;
   const weightedScore = (
     recency.score * weights.recencyWeight +
     frequency.score * weights.frequencyWeight +
     monetary.score * weights.monetaryWeight
-  ) * (15 / (weights.recencyWeight + weights.frequencyWeight + weights.monetaryWeight));
+  ) * (weightSum > 0 ? 15 / weightSum : 0);
 
   return {
     id: lead.id,
