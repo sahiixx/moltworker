@@ -206,7 +206,7 @@ npx wrangler secret put RETELL_AGENT_ID
 
 # Your phone number for outbound calls
 npx wrangler secret put PHONE_NUMBER
-# Enter: +971567148469
+# Enter: your_phone_number_in_e164_format
 ```
 
 ### 4.3 Prepare Lead Data
