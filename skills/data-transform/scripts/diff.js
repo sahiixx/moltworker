@@ -171,10 +171,11 @@ function deepCompare(obj1, obj2, path = '$', options = {}) {
 /**
  * Produce a unified, patch-like text representation of the detected changes between two inputs.
  *
- * @param {object} changes - Diff object containing arrays: `added`, `removed`, and `changed`. Each entry in `added`/`removed` is `{ path, value }`; each entry in `changed` is `{ path, old, new }`.
- * @param {string} file1 - Label or path used as the "original" header in the unified output.
- * @param {string} file2 - Label or path used as the "updated" header in the unified output.
- * @returns {string} A newline-separated unified diff where removed lines start with `- `, added lines start with `+ `, and changed items are represented by an adjacent removed (`-`) and added (`+`) line; includes header lines for both inputs.
+ * `@param` {object} changes - Diff object containing arrays: `added`, `removed`, and `changed`. Each entry in `added`/`removed` is `{ path, value }`; each entry in `changed` is `{ path, old, new }`.
+ * `@param` {string} file1 - Label or path used as the "original" header in the unified output.
+ * `@param` {string} file2 - Label or path used as the "updated" header in the unified output.
+ * `@returns` {string} A newline-separated unified diff where removed lines start with `- `, added lines start with `+ `, and changed items are represented by an adjacent removed (`-`) and added (`+`) line; includes header lines for both inputs.
+ */
 function formatUnified(changes, file1, file2) {
   const lines = [];
   lines.push(`--- ${file1}`);
