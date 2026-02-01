@@ -9,7 +9,7 @@ const args = process.argv.slice(2);
 /**
  * Send an HTTP request to a URL (derived from command-line args) and print the parsed JSON response or a structured error.
  *
- * Reads arguments to determine the target URL, optional `--post`/`--put` JSON body and method, issues the request with JSON headers, writes the pretty-printed JSON response to stdout on success, and writes a JSON-formatted error to stderr and exits with code 1 on missing URL, non-OK responses, or exceptions.
+ * Reads arguments to determine the target URL, optional `--post`/`--put` JSON body and method, issues the request with JSON headers, writes the pretty-printed JSON response to stdout on success; prints usage to stderr and exits with code 1 on missing URL; and writes a JSON-formatted error to stderr on non-OK responses or exceptions.
  */
 async function main() {
   let url = '';
