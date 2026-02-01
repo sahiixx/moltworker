@@ -83,10 +83,10 @@ function main() {
       salt = crypto.randomBytes(SALT_LENGTH);
       key = deriveKey(options.password, salt);
     } else {
-      key = Buffer.from(options.key, 'hex');
-      if (key.length !== KEY_LENGTH) {
-        throw new Error(`Key must be ${KEY_LENGTH} bytes (${KEY_LENGTH * 2} hex characters)`);
+      if (!/^[0-9a-fA-F]{64}$/.test(options.key)) {
+        throw new Error(`Key must be ${KEY_LENGTH * 2} hex characters (0-9, a-f)`);
       }
+      key = Buffer.from(options.key, 'hex');
     }
 
     const { iv, encrypted, tag } = encrypt(options.data, key);
