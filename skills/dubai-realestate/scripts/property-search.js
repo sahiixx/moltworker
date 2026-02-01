@@ -509,7 +509,7 @@ Examples:
           max: `${(Math.max(...results.map(r => r.price)) / 1000000).toFixed(2)}M AED`,
           avg: `${(results.reduce((sum, r) => sum + r.price, 0) / results.length / 1000000).toFixed(2)}M AED`
         } : null,
-        avgPricePerSqft: results.length > 0 ? `${Math.round(results.reduce((sum, r) => sum + r.price / r.sqft, 0) / results.length)} AED/sqft` : null
+        avgPricePerSqft: results.length > 0 ? `${Math.round(results.reduce((sum, r) => sum + (r.sqft > 0 ? r.price / r.sqft : 0), 0) / results.length)} AED/sqft` : null
       },
       properties: enrichedResults
     };
