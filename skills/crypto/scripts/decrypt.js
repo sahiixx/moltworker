@@ -68,10 +68,9 @@ function deriveKey(password, salt, iterations) {
 }
 
 /**
- * Decrypts AES-256-GCM encrypted payload encoded as base64 fields and returns the plaintext.
- *
- * @param {{iv: string, tag: string, ciphertext: string}} encrypted - Object containing base64-encoded `iv`, `tag`, and `ciphertext`.
- * @param {Buffer} key - 32-byte AES key.
+ * Decrypts an AES-256-GCM payload provided as base64-encoded `iv`, `tag`, and `ciphertext`.
+ * @param {{iv: string, tag: string, ciphertext: string}} encrypted - Object with base64-encoded `iv`, `tag`, and `ciphertext`.
+ * @param {Buffer} key - 32-byte AES-256 key.
  * @returns {string} The decrypted plaintext as a UTF-8 string.
  */
 function decrypt(encrypted, key) {
@@ -91,9 +90,9 @@ function decrypt(encrypted, key) {
 }
 
 /**
- * CLI entry point to decrypt an AES-256-GCM encrypted JSON payload using a password or raw key.
+ * CLI entry point that decrypts an AES-256-GCM encrypted JSON payload using either a password or a raw hex key.
  *
- * Parses command-line options, reads encrypted JSON from an inline argument or file, derives a 32-byte key from a provided password (using the payload's salt and iterations) or accepts a hex-encoded 256-bit key, decrypts the payload, and writes a structured JSON object with `success`, `plaintext`, and `algorithm` to stdout. On error prints a structured JSON error message to stderr and exits with code 1.
+ * Reads encrypted JSON from an inline argument or a file, derives or validates a 32-byte key (using the payload's salt and iterations when a password is supplied), decrypts the payload, and writes a structured JSON result to stdout; on error writes a structured JSON error to stderr and exits with code 1.
  */
 function main() {
   const options = parseArgs();
