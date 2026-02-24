@@ -91,9 +91,9 @@ function decrypt(encrypted, key) {
 }
 
 /**
- * CLI entry point to decrypt an AES-256-GCM encrypted JSON payload using a password or raw key.
+ * Run the CLI to decrypt an AES-256-GCM encrypted JSON payload using a password-derived key or a raw hex key.
  *
- * Parses command-line options, reads encrypted JSON from an inline argument or file, derives a 32-byte key from a provided password (using the payload's salt and iterations) or accepts a hex-encoded 256-bit key, decrypts the payload, and writes a structured JSON object with `success`, `plaintext`, and `algorithm` to stdout. On error prints a structured JSON error message to stderr and exits with code 1.
+ * Parses command-line options, loads encrypted JSON from an inline argument or a file, derives a 32-byte key from a provided password (using the payload's base64 `salt` and `iterations`, defaulting to 600000) or accepts a hex-encoded 256-bit key, decrypts the payload, and writes a JSON object containing `success`, `plaintext`, and `algorithm` to stdout on success. On failure, writes a structured JSON error to stderr and exits the process with code 1.
  */
 function main() {
   const options = parseArgs();
