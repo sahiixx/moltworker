@@ -378,4 +378,134 @@ describe('video.js', () => {
 
     expect(result.stderr).not.toContain('Usage');
   });
+
+  it('handles single URL without comma', async () => {
+    const result = await runScript(['https://single-url.com'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles combination of all options', async () => {
+    const result = await runScript(
+      ['https://a.com,https://b.com', 'custom.mp4', '--fps', '15', '--scroll'],
+      {
+        CDP_SECRET: 'test-secret',
+        WORKER_URL: 'wss://invalid.test',
+      }
+    );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with ports', async () => {
+    const result = await runScript(['https://example.com:8080,http://test.com:3000'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with query parameters', async () => {
+    const result = await runScript(['https://example.com?a=1,https://test.com?b=2'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles scroll flag without fps flag', async () => {
+    const result = await runScript(['https://example.com', '--scroll'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles fps flag without scroll flag', async () => {
+    const result = await runScript(['https://example.com', '--fps', '30'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles output path with subdirectories', async () => {
+    const result = await runScript(['https://example.com', 'videos/output/video.mp4'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles absolute output path', async () => {
+    const result = await runScript(['https://example.com', '/tmp/absolute-video.mp4'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles localhost URLs', async () => {
+    const result = await runScript(['http://localhost:8080,http://127.0.0.1:3000'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles data URLs', async () => {
+    const result = await runScript(['data:text/html,<h1>Test</h1>'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with whitespace that gets trimmed', async () => {
+    const result = await runScript([' https://example.com , https://test.com '], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles maximum fps value', async () => {
+    const result = await runScript(['https://example.com', '--fps', '120'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles non-numeric fps value', async () => {
+    const result = await runScript(['https://example.com', '--fps', 'invalid'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('shows error when CDP_SECRET is not set', async () => {
+    const result = await runScript(['https://example.com'], {
+      CDP_SECRET: '',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('CDP_SECRET');
+  });
 });

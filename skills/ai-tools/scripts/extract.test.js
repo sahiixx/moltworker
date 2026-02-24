@@ -430,4 +430,138 @@ describe('extract.js', () => {
     const output = JSON.parse(result.stdout);
     expect(output.extracted['field-name']).toBe('value');
   });
+
+  it('extracts JSON from markdown code blocks without language marker', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '```\n{"name": "NoLang", "value": 99}\n```' }],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['text', '--schema', '{"name":"string","value":"number"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.name).toBe('NoLang');
+    expect(output.extracted.value).toBe(99);
+  });
+
+  it('handles extraction when response has extra whitespace', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '\n\n  {"data": "trimmed"}  \n\n' }],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--schema', '{"data":"string"}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.data).toBe('trimmed');
+  });
+
+  it('handles extraction with boolean and null values', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [
+          {
+            text: JSON.stringify({
+              active: true,
+              deleted: false,
+              metadata: null,
+            }),
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['text', '--schema', '{"active":"boolean","deleted":"boolean","metadata":"null"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.active).toBe(true);
+    expect(output.extracted.deleted).toBe(false);
+    expect(output.extracted.metadata).toBe(null);
+  });
+
+  it('handles API response with missing content array', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--schema', '{"field":"string"}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+  });
+
+  it('handles very large extracted objects', async () => {
+    const largeObject = {
+      items: Array(100)
+        .fill(null)
+        .map((_, i) => ({ id: i, name: `Item ${i}` })),
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(largeObject) }],
+        usage: { input_tokens: 500, output_tokens: 800 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['text with many items', '--schema', '{"items":"array"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.items).toHaveLength(100);
+    expect(output.usage.output_tokens).toBe(800);
+  });
+
+  it('handles schema with unicode characters', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{"名前": "太郎", "年齢": 25}' }],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['日本語のテキスト', '--schema', '{"名前":"string","年齢":"number"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted['名前']).toBe('太郎');
+    expect(output.extracted['年齢']).toBe(25);
+  });
 });
