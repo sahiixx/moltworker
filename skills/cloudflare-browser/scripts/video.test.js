@@ -271,4 +271,111 @@ describe('video.js', () => {
 
     expect(result.stderr).not.toContain('Usage');
   });
+
+  it('handles localhost URLs', async () => {
+    const result = await runScript(['http://localhost:3000'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles IP address URLs', async () => {
+    const result = await runScript(['http://192.168.1.1'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with fragments', async () => {
+    const result = await runScript(['https://example.com#section'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles mixed http and https URLs', async () => {
+    const result = await runScript(['https://secure.com,http://insecure.com'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles custom output with --fps and --scroll', async () => {
+    const result = await runScript(
+      ['https://example.com', 'custom.mp4', '--fps', '25', '--scroll'],
+      {
+        CDP_SECRET: 'test-secret',
+        WORKER_URL: 'wss://invalid.test',
+      }
+    );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles zero FPS value', async () => {
+    const result = await runScript(['https://example.com', '--fps', '0'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles negative FPS value', async () => {
+    const result = await runScript(['https://example.com', '--fps', '-5'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles output filename without mp4 extension', async () => {
+    const result = await runScript(['https://example.com', 'myvideo'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles long list of URLs', async () => {
+    const urls = Array(20)
+      .fill(0)
+      .map((_, i) => `https://example${i}.com`)
+      .join(',');
+
+    const result = await runScript([urls], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with special characters in path', async () => {
+    const result = await runScript(['https://example.com/path%20with%20spaces'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles empty string in comma-separated list', async () => {
+    const result = await runScript(['https://example.com,,https://test.com'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
 });

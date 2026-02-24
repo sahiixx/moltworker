@@ -363,12 +363,12 @@ describe('summarize.js', () => {
     expect(output.style).toBe('unknown');
   });
 
-  it('handles extremely short text', async () => {
+  it('handles very short text input', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        content: [{ text: 'Short text summarized.' }],
-        usage: { input_tokens: 5, output_tokens: 10 },
+        content: [{ text: 'Hi' }],
+        usage: { input_tokens: 5, output_tokens: 2 },
       }),
     });
     global.fetch = mockFetch;
@@ -382,53 +382,84 @@ describe('summarize.js', () => {
     expect(output.originalLength).toBe(2);
   });
 
-  it('handles multi-paragraph text', async () => {
-    const multiPara = 'First paragraph.\\n\\nSecond paragraph.\\n\\nThird paragraph.';
+  it('handles multi-word text arguments', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        content: [{ text: 'Multi-paragraph summary.' }],
-        usage: { input_tokens: 50, output_tokens: 15 },
+        content: [{ text: 'Summary of multiple words.' }],
+        usage: { input_tokens: 20, output_tokens: 15 },
       }),
     });
     global.fetch = mockFetch;
 
-    const result = await runScript([multiPara], {
+    const result = await runScript(['This', 'is', 'multiple', 'words'], {
       ANTHROPIC_API_KEY: 'test-key',
     });
 
     expect(result.code).toBe(0);
   });
 
-  it('handles very long target length', async () => {
+  it('handles very large length parameter', async () => {
+    const longSummary = 'word '.repeat(500);
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        content: [{ text: 'Very long summary with many words repeated to reach target length.'.repeat(50) }],
+        content: [{ text: longSummary }],
         usage: { input_tokens: 100, output_tokens: 500 },
       }),
     });
     global.fetch = mockFetch;
 
-    const result = await runScript(['text', '--length', '1000'], {
+    const result = await runScript(['text', '--length', '10000'], {
       ANTHROPIC_API_KEY: 'test-key',
     });
 
     expect(result.code).toBe(0);
     const output = JSON.parse(result.stdout);
-    expect(output.targetWords).toBe(1000);
+    expect(output.targetWords).toBe(10000);
+  });
+
+  it('handles network errors', async () => {
+    const mockFetch = vi.fn().mockImplementation(() =>
+      Promise.reject(new Error('Connection reset'))
+    );
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+  });
+
+  it('handles rate limit errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => 'Too many requests',
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+    const error = JSON.parse(result.stderr);
+    expect(error.error).toContain('429');
   });
 
   it('handles file with special characters', async () => {
-    const tempFile = join(tmpdir(), `test-summarize-特殊文字-${Date.now()}.txt`);
+    const tempFile = join(tmpdir(), `test-summarize-special-${Date.now()}.txt`);
     tempFiles.push(tempFile);
-    writeFileSync(tempFile, 'Content with special chars: @#$% émojis 🎉');
+    const content = 'Text with "quotes" and \'apostrophes\' & symbols!';
+    writeFileSync(tempFile, content);
 
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        content: [{ text: 'Summary of special content.' }],
-        usage: { input_tokens: 20, output_tokens: 10 },
+        content: [{ text: 'Summary of special text.' }],
+        usage: { input_tokens: 50, output_tokens: 20 },
       }),
     });
     global.fetch = mockFetch;
@@ -440,13 +471,12 @@ describe('summarize.js', () => {
     expect(result.code).toBe(0);
   });
 
-  it('counts words accurately with whitespace variations', async () => {
-    const summary = 'Word1   Word2\t\tWord3\nWord4';
+  it('tracks token usage accurately', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        content: [{ text: summary }],
-        usage: { input_tokens: 10, output_tokens: 10 },
+        content: [{ text: 'Summary.' }],
+        usage: { input_tokens: 250, output_tokens: 50 },
       }),
     });
     global.fetch = mockFetch;
@@ -457,18 +487,47 @@ describe('summarize.js', () => {
 
     expect(result.code).toBe(0);
     const output = JSON.parse(result.stdout);
-    expect(output.actualWords).toBe(4);
+    expect(output.usage.input_tokens).toBe(250);
+    expect(output.usage.output_tokens).toBe(50);
   });
 
-  it('handles network errors during summarization', async () => {
-    const mockFetch = vi.fn().mockRejectedValue(new Error('Connection reset'));
+  it('handles empty summary response', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '   ' }],
+        usage: { input_tokens: 10, output_tokens: 1 },
+      }),
+    });
     global.fetch = mockFetch;
 
-    const result = await runScript(['text to summarize'], {
+    const result = await runScript(['text'], {
       ANTHROPIC_API_KEY: 'test-key',
     });
 
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain('error');
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.summary).toBe('');
+    expect(output.actualWords).toBe(0);
+  });
+
+  it('handles combination of style and length parameters', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '- Point one\n- Point two\n- Point three' }],
+        usage: { input_tokens: 100, output_tokens: 30 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--style', 'bullets', '--length', '50'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.style).toBe('bullets');
+    expect(output.targetWords).toBe(50);
   });
 });

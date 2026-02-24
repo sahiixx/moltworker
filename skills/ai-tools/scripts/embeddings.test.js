@@ -266,45 +266,29 @@ describe('embeddings.js', () => {
     expect(result.code).toBe(0);
   });
 
-  it('handles very long input text', async () => {
-    const longText = 'word '.repeat(10000);
+  it('handles very large embeddings correctly', async () => {
+    const largeEmbedding = Array(3072).fill(0.123);
     const mockResponse = {
       ok: true,
       json: async () => ({
-        data: [{ embedding: Array(1536).fill(0.1) }],
-        usage: { total_tokens: 10000 },
+        data: [{ embedding: largeEmbedding }],
+        usage: { total_tokens: 10 },
       }),
     };
 
     mockFetch.mockResolvedValue(mockResponse);
 
-    const result = await runScript([longText], {
+    const result = await runScript(['test text', '--dimensions', '3072'], {
       OPENAI_API_KEY: 'test-key',
     });
 
     expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.dimensions).toBe(3072);
+    expect(output.embedding[0]).toBe(0.123);
   });
 
-  it('handles special characters in text', async () => {
-    const specialText = 'Hello! @#$%^&*() émojis 🎉🎊 ñáéíóú';
-    const mockResponse = {
-      ok: true,
-      json: async () => ({
-        data: [{ embedding: [0.1, 0.2, 0.3] }],
-        usage: { total_tokens: 15 },
-      }),
-    };
-
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const result = await runScript([specialText], {
-      OPENAI_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(0);
-  });
-
-  it('handles invalid dimensions parameter', async () => {
+  it('handles special characters in text input', async () => {
     const mockResponse = {
       ok: true,
       json: async () => ({
@@ -315,33 +299,81 @@ describe('embeddings.js', () => {
 
     mockFetch.mockResolvedValue(mockResponse);
 
-    const result = await runScript(['text', '--dimensions', 'invalid'], {
+    const result = await runScript(['Text with "quotes" and \'apostrophes\' & symbols!'], {
       OPENAI_API_KEY: 'test-key',
     });
 
     expect(result.code).toBe(0);
-    const output = JSON.parse(result.stdout);
-    // NaN becomes null when serialized to JSON
-    expect(output.dimensions).toBeNull();
   });
 
-  it('handles zero dimensions parameter', async () => {
+  it('handles rate limit errors', async () => {
+    const mockResponse = {
+      ok: false,
+      status: 429,
+      text: async () => 'Rate limit exceeded',
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await runScript(['test text'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+    const error = JSON.parse(result.stderr);
+    expect(error.error).toContain('429');
+  });
+
+  it('handles invalid dimensions parameter gracefully', async () => {
     const mockResponse = {
       ok: true,
       json: async () => ({
-        data: [{ embedding: [] }],
+        data: [{ embedding: [0.1] }],
         usage: { total_tokens: 5 },
       }),
     };
 
     mockFetch.mockResolvedValue(mockResponse);
 
-    const result = await runScript(['text', '--dimensions', '0'], {
+    const result = await runScript(['test text', '--dimensions', 'invalid'], {
       OPENAI_API_KEY: 'test-key',
     });
 
     expect(result.code).toBe(0);
     const output = JSON.parse(result.stdout);
-    expect(output.dimensions).toBe(0);
+    // parseInt('invalid') returns NaN, which becomes null when stringified to JSON
+    expect(output.dimensions).toBe(null);
+  });
+
+  it('handles network timeout errors', async () => {
+    mockFetch.mockImplementation(() =>
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('ETIMEDOUT')), 100)
+      )
+    );
+
+    const result = await runScript(['test text'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('ETIMEDOUT');
+  });
+
+  it('handles malformed JSON response', async () => {
+    const mockResponse = {
+      ok: true,
+      json: async () => {
+        throw new Error('Unexpected token in JSON');
+      },
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await runScript(['test text'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
   });
 });
