@@ -113,11 +113,9 @@ IMPORTANT: Return ONLY a valid JSON object. No preamble or explanation.`;
 }
 
 /**
- * Execute the CLI workflow: parse command-line arguments, validate required inputs, perform data extraction, and print the JSON result or an error.
+ * Orchestrates the command-line workflow: parse arguments, validate inputs, run extraction, and emit output.
  *
- * If required inputs are missing, prints usage information and exits with code 1.
- * On successful extraction, prints the pretty-printed JSON result to stdout.
- * On extraction failure, prints an error object to stderr and exits with code 1.
+ * If required inputs are missing, prints usage information and exits with code 1. On successful extraction, writes the pretty-printed JSON result to stdout. On extraction failure, writes an error object to stderr and exits with code 1.
  */
 async function main() {
   const args = process.argv.slice(2);

@@ -91,9 +91,9 @@ async function generateEmbeddings(text, model, dimensions) {
 }
 
 /**
- * Entry point that reads CLI arguments, generates embeddings for provided text, and outputs results.
+ * Orchestrates the CLI flow: parse arguments, generate embeddings for the provided text, and output or save the results.
  *
- * Reads arguments from process.argv to obtain text, model, dimensions, and an optional output path. If text is missing, prints usage and exits with code 1. On success, writes the full result as pretty JSON to the specified output file or prints a truncated embedding preview; on error prints a JSON object with the error message and exits with code 1.
+ * If no text is provided, prints usage information and exits with code 1. On success, writes the full result to the specified output file when an output path is given; otherwise prints a truncated embedding preview. On error, prints a JSON object containing the error message and exits with code 1.
  */
 async function main() {
   const args = process.argv.slice(2);

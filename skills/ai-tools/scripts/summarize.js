@@ -130,15 +130,9 @@ Return ONLY the summary. No introduction or extra text.`;
 }
 
 /**
- * Orchestrates CLI argument parsing, input acquisition, summarization, and JSON output.
+ * Run the CLI: parse command-line arguments, read input (text or file), perform summarization, and print the result as formatted JSON.
  *
- * Parses command-line options, reads input text (or a file when --file is set), calls
- * summarizeText(...) with the configured length, style, and model, and prints the
- * resulting summary object as pretty-printed JSON to stdout.
- *
- * If no input is provided, prints usage instructions and exits with code 1. On errors
- * (including missing file or API failures) prints a JSON error object to stderr and
- * exits with code 1.
+ * If no input is provided, prints usage to stderr and exits with code 1. On errors (for example, missing file or API failure), prints a JSON object containing an `error` message to stderr and exits with code 1.
  */
 async function main() {
   const args = process.argv.slice(2);

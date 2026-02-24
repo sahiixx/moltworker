@@ -87,9 +87,9 @@ function encrypt(data, key) {
 }
 
 /**
- * Parse CLI arguments, encrypt the provided data with AES-256-GCM using either a password-derived or raw key, and emit the result as JSON.
+ * Orchestrates CLI-driven AES-256-GCM encryption of the provided data and emits the result as JSON.
  *
- * When `--password` is supplied a random 16-byte salt is generated and a 256-bit key is derived via PBKDF2-SHA256; when `--key` is supplied the value must be a 64-character hex string and is used directly. The output JSON contains `algorithm`, base64-encoded `iv`, `tag`, and `ciphertext`; when a password was used the JSON also includes `salt` (base64), `kdf`, and `iterations`. If `--output` is provided the JSON is written to the specified file and a short success JSON is printed; on invalid usage or runtime error the function prints an error JSON to stderr and exits the process with code 1.
+ * Validates that a data argument and either `--password` or `--key` are supplied, derives a 256-bit key from a password (PBKDF2-SHA256 with a random 16-byte salt) or uses a raw 64-hex-character key, encrypts the data, and produces a JSON object with `algorithm`, base64-encoded `iv`, `tag`, and `ciphertext`. When a password was used the output also contains `salt` (base64), `kdf: 'pbkdf2'`, and `iterations`. If `--output` is provided the JSON is written to the specified file and a short success JSON is printed to stdout; otherwise the full result JSON is printed to stdout. On invalid usage or runtime error an error JSON is written to stderr and the process exits with code 1.
  */
 function main() {
   const options = parseArgs();

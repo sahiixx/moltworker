@@ -9,13 +9,12 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * Parse CLI arguments into an options object for image analysis.
+ * Parses CLI tokens into an options object for image analysis.
  *
- * Supports flags `--model <value>` and `--detail <value>`. The first
- * non-flag positional argument is treated as the image path or URL;
- * any remaining positional arguments are joined with spaces to form the prompt.
+ * Supports flags `--model <value>` and `--detail <value>`. The first non-flag positional
+ * argument becomes `image`; remaining positionals (if any) are joined with spaces to form `prompt`.
  *
- * @param {string[]} args - Array of command-line tokens (e.g., process.argv.slice(...)).
+ * @param {string[]} args - Command-line tokens (e.g., process.argv.slice(2)).
  * @returns {{image: string, prompt: string, model: string, detail: string}} An options object:
  *   - `image`: image path or URL (empty string if not provided)
  *   - `prompt`: prompt text to send to the analyzer
