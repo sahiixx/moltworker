@@ -53,13 +53,20 @@ function parseArgs() {
 /**
  * Parse CLI arguments, compute a hash or HMAC for the provided input, and print a JSON result.
  *
- * Accepts input as a literal string or as a file when invoked with `--file`. Uses `--algorithm` to
- * select the digest algorithm and `--hmac` to supply an HMAC key. Outputs a pretty-printed JSON
- * object containing `type` ("hash" or "hmac"), `algorithm`, `encoding`, `hash`, `inputLength`,
- * and `file` when a file was used.
+ * Accepts input as a literal string or a file when invoked with `--file`. Recognized options:
+ * `--algorithm` to select the digest algorithm, `--encoding` to select output encoding
+ * (`hex`, `base64`, or `base64url`), and `--hmac` to supply an HMAC key.
  *
- * On missing input prints usage information and exits with code 1. On error prints a JSON object
- * with an `error` message and exits with code 1.
+ * Prints a pretty-printed JSON object with fields:
+ * - `type`: "hash" or "hmac"
+ * - `algorithm`: chosen algorithm
+ * - `encoding`: chosen encoding
+ * - `hash`: computed digest
+ * - `inputLength`: number of bytes of the input
+ * - `file`: original file path when input was read from a file (only present when `--file` used)
+ *
+ * If no input is provided, prints usage information to stderr and exits with code 1.
+ * On error prints a JSON object with an `error` message to stderr and exits with code 1.
  */
 function main() {
   const options = parseArgs();

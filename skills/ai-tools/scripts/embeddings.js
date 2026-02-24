@@ -46,14 +46,14 @@ function parseArgs(args) {
 }
 
 /**
- * Generate a vector embedding for the provided text using an OpenAI-compatible embeddings API.
+ * Generate a vector embedding for the given text via an OpenAI-compatible embeddings API.
  *
  * @param {string} text - The input text to embed.
- * @param {string} model - The embedding model identifier to use.
- * @param {number} dimensions - The expected dimensionality of the returned embedding.
- * @returns {{model: string, dimensions: number, embedding: number[], usage: {tokens: number}}} An object containing the model, dimensions, the embedding vector, and token usage.
+ * @param {string} model - Embedding model identifier to use.
+ * @param {number} dimensions - Expected dimensionality of the returned embedding.
+ * @returns {{model: string, dimensions: number, embedding: number[], usage: {tokens: number}}} An object with the model, dimensions, the embedding vector, and token usage.
  * @throws {Error} If no API key is available via OPENAI_API_KEY or AI_GATEWAY_API_KEY.
- * @throws {Error} If the remote API responds with a non-OK status (message includes HTTP status and response body).
+ * @throws {Error} If the API responds with a non-OK HTTP status (message includes status and response body).
  */
 async function generateEmbeddings(text, model, dimensions) {
   const apiKey = process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY;
@@ -91,9 +91,11 @@ async function generateEmbeddings(text, model, dimensions) {
 }
 
 /**
- * Entry point that reads CLI arguments, generates embeddings for provided text, and outputs results.
+ * Run the CLI: parse arguments, generate embeddings for the provided text, and print or save the result.
  *
- * Reads arguments from process.argv to obtain text, model, dimensions, and an optional output path. If text is missing, prints usage and exits with code 1. On success, writes the full result as pretty JSON to the specified output file or prints a truncated embedding preview; on error prints a JSON object with the error message and exits with code 1.
+ * If the required text argument is missing, prints usage information and exits with code 1.
+ * On success, when an output path is provided the full result is written as pretty JSON to that file and a JSON summary is printed; otherwise a truncated embedding preview is printed to stdout.
+ * On error, prints a JSON object with the error message and exits with code 1.
  */
 async function main() {
   const args = process.argv.slice(2);

@@ -54,9 +54,9 @@ function parseArgs(args) {
 }
 
 /**
- * Analyze an image with a multimodal Anthropic-compatible Vision API and return the model's textual analysis.
+ * Send an image and prompt to an Anthropic-compatible Vision API to obtain a textual analysis.
  *
- * @param {string} imagePath - URL or local filesystem path to the image to analyze. If a URL is provided the image is fetched; otherwise the file is read.
+ * @param {string} imagePath - URL or local filesystem path to the image to analyze; if a URL is provided the image is fetched, otherwise the file is read.
  * @param {string} prompt - Text prompt describing what to ask the model about the image.
  * @param {string} model - Model identifier to use for the analysis.
  * @param {string} detail - Detail level hint for the analysis (e.g., "auto", "high"); passed through to the API payload.
@@ -141,9 +141,9 @@ async function analyzeImage(imagePath, prompt, model, detail) {
 }
 
 /**
- * Run the CLI: parse command-line arguments, analyze an image, and print the JSON result.
+ * Run the CLI: parse arguments, analyze an image, and print the JSON result.
  *
- * Parses command-line arguments, validates that an image path or URL was provided (prints usage and exits with code 1 if missing), calls analyzeImage with the parsed options, and writes the analysis result as pretty-printed JSON to stdout. On error, writes a JSON object with an `error` message to stderr and exits with code 1.
+ * Parses command-line arguments, validates that an image path or URL was provided, invokes analyzeImage with the parsed options, and writes the analysis object as pretty-printed JSON to stdout. If the image is missing or any error occurs during analysis, writes a JSON `{ error: <message> }` to stderr and exits the process with code 1.
  */
 async function main() {
   const args = process.argv.slice(2);
