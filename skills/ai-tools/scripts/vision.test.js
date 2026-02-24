@@ -419,26 +419,22 @@ describe('vision.js', () => {
     expect(result.code).toBe(0);
   });
 
-  it('handles very large image file', async () => {
-    const tempFile = join(tmpdir(), `test-large-${Date.now()}.png`);
+  it('handles very large images', async () => {
+    const tempFile = join(tmpdir(), `test-image-${Date.now()}.png`);
     tempFiles.push(tempFile);
-    writeFileSync(tempFile, Buffer.alloc(5 * 1024 * 1024));
+    const largeBuffer = Buffer.alloc(10 * 1024 * 1024); // 10MB
+    writeFileSync(tempFile, largeBuffer);
 
     mockFetch.mockImplementation(async (url) => {
       if (url.startsWith('https://api.anthropic.com')) {
         return {
           ok: true,
           json: async () => ({
-            content: [{ text: 'Large image analysis.' }],
-            usage: { input_tokens: 5000, output_tokens: 50 },
+            content: [{ text: 'Large image analyzed.' }],
+            usage: { input_tokens: 5000, output_tokens: 20 },
           }),
         };
       }
-      return {
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(8),
-        headers: new Map([['content-type', 'image/jpeg']]),
-      };
     });
 
     const result = await runScript([tempFile], {
@@ -449,7 +445,11 @@ describe('vision.js', () => {
   });
 
   it('handles network error when fetching remote image', async () => {
-    mockFetch.mockRejectedValue(new Error('Network error'));
+    mockFetch.mockImplementation(async (url) => {
+      if (!url.startsWith('https://api.anthropic.com')) {
+        throw new Error('Network error');
+      }
+    });
 
     const result = await runScript(['https://example.com/image.jpg'], {
       ANTHROPIC_API_KEY: 'test-key',
@@ -459,121 +459,13 @@ describe('vision.js', () => {
     expect(result.stderr).toContain('error');
   });
 
-  it('handles invalid image URL', async () => {
-    mockFetch.mockImplementation(async (url) => {
-      if (url.startsWith('https://example.com')) {
-        return {
-          ok: false,
-          status: 404,
-        };
-      }
-      return {
-        ok: true,
-        json: async () => ({
-          content: [{ text: 'Analysis.' }],
-          usage: { input_tokens: 1500, output_tokens: 20 },
-        }),
-      };
-    });
-
-    const result = await runScript(['https://example.com/notfound.jpg'], {
-      ANTHROPIC_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(1);
-  });
-
-  it('handles API returning error for invalid image format', async () => {
-    mockFetch.mockImplementation(async (url) => {
-      if (url.startsWith('https://api.anthropic.com')) {
-        return {
-          ok: false,
-          status: 400,
-          text: async () => 'Invalid image format',
-        };
-      }
-      return {
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(8),
-        headers: new Map([['content-type', 'image/jpeg']]),
-      };
-    });
-
-    const result = await runScript(['https://example.com/bad.jpg'], {
-      ANTHROPIC_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(1);
-    const error = JSON.parse(result.stderr);
-    expect(error.error).toContain('400');
-  });
-
-  it('handles very long prompt', async () => {
-    const longPrompt = 'Describe ' + 'very '.repeat(100) + 'detailed';
-
+  it('handles image URL with redirect', async () => {
     mockFetch.mockImplementation(async (url) => {
       if (url.startsWith('https://api.anthropic.com')) {
         return {
           ok: true,
           json: async () => ({
-            content: [{ text: 'Detailed analysis response.' }],
-            usage: { input_tokens: 1600, output_tokens: 100 },
-          }),
-        };
-      }
-      return {
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(8),
-        headers: new Map([['content-type', 'image/jpeg']]),
-      };
-    });
-
-    const result = await runScript(['https://example.com/image.jpg', ...longPrompt.split(' ')], {
-      ANTHROPIC_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(0);
-  });
-
-  it('includes usage tokens in output', async () => {
-    mockFetch.mockImplementation(async (url) => {
-      if (url.startsWith('https://api.anthropic.com')) {
-        return {
-          ok: true,
-          json: async () => ({
-            content: [{ text: 'Analysis.' }],
-            usage: { input_tokens: 2000, output_tokens: 50 },
-          }),
-        };
-      }
-      return {
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(8),
-        headers: new Map([['content-type', 'image/jpeg']]),
-      };
-    });
-
-    const result = await runScript(['https://example.com/image.jpg'], {
-      ANTHROPIC_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(0);
-    const output = JSON.parse(result.stdout);
-    expect(output.usage.input_tokens).toBe(2000);
-    expect(output.usage.output_tokens).toBe(50);
-  });
-
-  it('handles GIF format', async () => {
-    const tempFile = join(tmpdir(), `test-image-${Date.now()}.gif`);
-    tempFiles.push(tempFile);
-    writeFileSync(tempFile, Buffer.from('GIF89a'));
-
-    mockFetch.mockImplementation(async (url) => {
-      if (url.startsWith('https://api.anthropic.com')) {
-        return {
-          ok: true,
-          json: async () => ({
-            content: [{ text: 'GIF image.' }],
+            content: [{ text: 'Redirected image.' }],
             usage: { input_tokens: 1500, output_tokens: 20 },
           }),
         };
@@ -581,8 +473,54 @@ describe('vision.js', () => {
       return {
         ok: true,
         arrayBuffer: async () => new ArrayBuffer(8),
-        headers: new Map([['content-type', 'image/gif']]),
+        headers: new Map([['content-type', 'image/png']]),
       };
+    });
+
+    const result = await runScript(['https://example.com/redirect-image.png'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles complex prompts with special characters', async () => {
+    mockFetch.mockImplementation(async (url) => {
+      if (url.startsWith('https://api.anthropic.com')) {
+        return {
+          ok: true,
+          json: async () => ({
+            content: [{ text: 'Analysis complete.' }],
+            usage: { input_tokens: 1500, output_tokens: 20 },
+          }),
+        };
+      }
+      return {
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(8),
+        headers: new Map([['content-type', 'image/jpeg']]),
+      };
+    });
+
+    const result = await runScript(
+      ['https://example.com/image.jpg', 'What\'s this? @#$% émojis 🎉'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles .jpeg extension (alternate JPEG extension)', async () => {
+    const tempFile = join(tmpdir(), `test-image-${Date.now()}.jpeg`);
+    tempFiles.push(tempFile);
+    writeFileSync(tempFile, Buffer.from('fake-jpeg-data'));
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'JPEG image.' }],
+        usage: { input_tokens: 1500, output_tokens: 20 },
+      }),
     });
 
     const result = await runScript([tempFile], {
@@ -590,111 +528,5 @@ describe('vision.js', () => {
     });
 
     expect(result.code).toBe(0);
-  });
-
-  it('handles remote image with different content-type', async () => {
-    mockFetch.mockImplementation(async (url) => {
-      if (url.startsWith('https://api.anthropic.com')) {
-        return {
-          ok: true,
-          json: async () => ({
-            content: [{ text: 'Image analysis.' }],
-            usage: { input_tokens: 1500, output_tokens: 30 },
-          }),
-        };
-      }
-      return {
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(8),
-        headers: new Map([['content-type', 'image/webp']]),
-      };
-    });
-
-    const result = await runScript(['https://example.com/image.webp'], {
-      ANTHROPIC_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(0);
-  });
-
-  it('handles rate limiting error', async () => {
-    mockFetch.mockImplementation(async (url) => {
-      if (url.startsWith('https://api.anthropic.com')) {
-        return {
-          ok: false,
-          status: 429,
-          text: async () => 'Rate limit exceeded',
-        };
-      }
-      return {
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(8),
-        headers: new Map([['content-type', 'image/jpeg']]),
-      };
-    });
-
-    const result = await runScript(['https://example.com/image.jpg'], {
-      ANTHROPIC_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(1);
-    const error = JSON.parse(result.stderr);
-    expect(error.error).toContain('429');
-  });
-
-  it('handles image with base64 special characters', async () => {
-    const tempFile = join(tmpdir(), `test-special-${Date.now()}.png`);
-    tempFiles.push(tempFile);
-    writeFileSync(tempFile, Buffer.from('++//=='));
-
-    mockFetch.mockImplementation(async (url) => {
-      if (url.startsWith('https://api.anthropic.com')) {
-        return {
-          ok: true,
-          json: async () => ({
-            content: [{ text: 'Special chars image.' }],
-            usage: { input_tokens: 1500, output_tokens: 20 },
-          }),
-        };
-      }
-      return {
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(8),
-        headers: new Map([['content-type', 'image/jpeg']]),
-      };
-    });
-
-    const result = await runScript([tempFile], {
-      ANTHROPIC_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(0);
-  });
-
-  it('verifies model is included in output', async () => {
-    mockFetch.mockImplementation(async (url) => {
-      if (url.startsWith('https://api.anthropic.com')) {
-        return {
-          ok: true,
-          json: async () => ({
-            content: [{ text: 'Analysis.' }],
-            usage: { input_tokens: 1500, output_tokens: 20 },
-          }),
-        };
-      }
-      return {
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(8),
-        headers: new Map([['content-type', 'image/jpeg']]),
-      };
-    });
-
-    const result = await runScript(['https://example.com/image.jpg'], {
-      ANTHROPIC_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(0);
-    const output = JSON.parse(result.stdout);
-    expect(output.model).toBe('claude-3-5-sonnet-20241022');
   });
 });

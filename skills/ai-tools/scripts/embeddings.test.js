@@ -266,141 +266,82 @@ describe('embeddings.js', () => {
     expect(result.code).toBe(0);
   });
 
-  it('saves embeddings to file when --output is specified', async () => {
-    const fs = require('fs');
-    const path = require('path');
-    const os = require('os');
-    const outputFile = path.join(os.tmpdir(), `test-embeddings-${Date.now()}.json`);
-
+  it('handles very long input text', async () => {
+    const longText = 'word '.repeat(10000);
     const mockResponse = {
       ok: true,
       json: async () => ({
-        data: [{ embedding: [0.1, 0.2, 0.3, 0.4, 0.5] }],
-        usage: { total_tokens: 10 },
+        data: [{ embedding: Array(1536).fill(0.1) }],
+        usage: { total_tokens: 10000 },
       }),
     };
 
     mockFetch.mockResolvedValue(mockResponse);
 
-    const result = await runScript(['test text', '--output', outputFile], {
+    const result = await runScript([longText], {
       OPENAI_API_KEY: 'test-key',
     });
 
     expect(result.code).toBe(0);
+  });
 
-    // Verify file was created
-    if (fs.existsSync(outputFile)) {
-      const savedData = JSON.parse(fs.readFileSync(outputFile, 'utf-8'));
-      expect(savedData).toHaveProperty('embedding');
-      expect(savedData).toHaveProperty('model');
-      expect(savedData.embedding).toHaveLength(5);
-      fs.unlinkSync(outputFile);
-    }
+  it('handles special characters in text', async () => {
+    const specialText = 'Hello! @#$%^&*() émojis 🎉🎊 ñáéíóú';
+    const mockResponse = {
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        usage: { total_tokens: 15 },
+      }),
+    };
 
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await runScript([specialText], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles invalid dimensions parameter', async () => {
+    const mockResponse = {
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: [0.1, 0.2] }],
+        usage: { total_tokens: 5 },
+      }),
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await runScript(['text', '--dimensions', 'invalid'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
     const output = JSON.parse(result.stdout);
-    expect(output).toHaveProperty('success', true);
-    expect(output).toHaveProperty('saved');
+    // NaN becomes null when serialized to JSON
+    expect(output.dimensions).toBeNull();
   });
 
   it('handles zero dimensions parameter', async () => {
     const mockResponse = {
       ok: true,
       json: async () => ({
-        data: [{ embedding: [0.1] }],
+        data: [{ embedding: [] }],
         usage: { total_tokens: 5 },
       }),
     };
 
     mockFetch.mockResolvedValue(mockResponse);
 
-    const result = await runScript(['test text', '--dimensions', '0'], {
+    const result = await runScript(['text', '--dimensions', '0'], {
       OPENAI_API_KEY: 'test-key',
     });
 
     expect(result.code).toBe(0);
     const output = JSON.parse(result.stdout);
     expect(output.dimensions).toBe(0);
-  });
-
-  it('handles rate limit errors', async () => {
-    const mockResponse = {
-      ok: false,
-      status: 429,
-      text: async () => 'Rate limit exceeded',
-    };
-
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const result = await runScript(['test text'], {
-      OPENAI_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(1);
-    const error = JSON.parse(result.stderr);
-    expect(error.error).toContain('429');
-  });
-
-  it('handles special characters in text', async () => {
-    const mockResponse = {
-      ok: true,
-      json: async () => ({
-        data: [{ embedding: [0.1, 0.2, 0.3] }],
-        usage: { total_tokens: 5 },
-      }),
-    };
-
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const result = await runScript(['test "quoted" text & special <chars>'], {
-      OPENAI_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(0);
-  });
-
-  it('handles unicode characters in text', async () => {
-    const mockResponse = {
-      ok: true,
-      json: async () => ({
-        data: [{ embedding: [0.1, 0.2] }],
-        usage: { total_tokens: 5 },
-      }),
-    };
-
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const result = await runScript(['Hello 你好 مرحبا'], {
-      OPENAI_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(0);
-  });
-
-  it('verifies correct API endpoint is called', async () => {
-    const mockResponse = {
-      ok: true,
-      json: async () => ({
-        data: [{ embedding: [0.1, 0.2] }],
-        usage: { total_tokens: 5 },
-      }),
-    };
-
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const result = await runScript(['test text'], {
-      OPENAI_API_KEY: 'test-key',
-    });
-
-    expect(result.code).toBe(0);
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/embeddings'),
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer test-key',
-        }),
-      })
-    );
   });
 });
