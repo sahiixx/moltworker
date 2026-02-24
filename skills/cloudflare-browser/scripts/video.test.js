@@ -1,16 +1,3 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { spawn } from 'child_process';
-import path from 'path';
-
-const scriptPath = path.join(process.cwd(), 'skills/cloudflare-browser/scripts/video.js');
-
-describe('video.js', () => {
-  let originalEnv;
-
-  beforeEach(() => {
-    originalEnv = { ...process.env };
-    process.env.CDP_SECRET = 'test-secret';
-    process.env.WORKER_URL = 'https://worker.example.com';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'child_process';
 import { existsSync, unlinkSync } from 'fs';
@@ -27,13 +14,6 @@ describe('video.js', () => {
 
   afterEach(() => {
     process.env = originalEnv;
-  });
-
-  function runScript(args) {
-    return new Promise((resolve) => {
-      const proc = spawn('node', [scriptPath, ...args], {
-        env: process.env,
-        timeout: 5000
     tempFiles.forEach((file) => {
       if (existsSync(file)) {
         try {
@@ -65,68 +45,6 @@ describe('video.js', () => {
         stderr += data.toString();
       });
 
-      proc.on('close', (exitCode) => {
-        resolve({ exitCode, stdout, stderr });
-      });
-    });
-  }
-
-  describe('environment validation', () => {
-    it('fails when CDP_SECRET is not set', async () => {
-      delete process.env.CDP_SECRET;
-
-      const result = await runScript(['https://example.com']);
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('CDP_SECRET environment variable not set');
-    });
-  });
-
-  describe('argument parsing', () => {
-    it('displays usage when no URL is provided', async () => {
-      const result = await runScript([]);
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('Usage: node video.js');
-    });
-
-    it('accepts single URL', async () => {
-      const result = await runScript(['https://example.com']);
-      expect(result.stderr).not.toContain('Usage:');
-    });
-
-    it('accepts multiple comma-separated URLs', async () => {
-      const result = await runScript(['https://example.com,https://example.org']);
-      expect(result.stderr).not.toContain('Usage:');
-    });
-
-    it('accepts --fps option', async () => {
-      const result = await runScript(['https://example.com', '--fps', '15']);
-      expect(result.stderr).not.toContain('Usage:');
-    });
-
-    it('accepts --scroll option', async () => {
-      const result = await runScript(['https://example.com', '--scroll']);
-      expect(result.stderr).not.toContain('Usage:');
-    });
-
-    it('accepts custom output filename', async () => {
-      const result = await runScript(['https://example.com', 'custom.mp4']);
-      expect(result.stderr).not.toContain('Usage:');
-    });
-  });
-
-  describe('URL parsing', () => {
-    it('splits comma-separated URLs', async () => {
-      const result = await runScript(['https://a.com,https://b.com,https://c.com']);
-      // Script will fail on WebSocket but arg parsing should work
-      expect(result.stderr).not.toContain('Usage:');
-    });
-
-    it('trims whitespace from URLs', async () => {
-      const result = await runScript(['https://a.com, https://b.com , https://c.com']);
-      expect(result.stderr).not.toContain('Usage:');
-    });
       proc.on('close', (code) => {
         resolve({ code, stdout, stderr });
       });
@@ -347,6 +265,103 @@ describe('video.js', () => {
 
   it('accepts URL without protocol', async () => {
     const result = await runScript(['example.com'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles zero FPS value', async () => {
+    const result = await runScript(['https://example.com', '--fps', '0'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles negative FPS value', async () => {
+    const result = await runScript(['https://example.com', '--fps', '-10'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles output filename with .avi extension', async () => {
+    const result = await runScript(['https://example.com', 'output.avi'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles output filename with spaces', async () => {
+    const outputFile = join(tmpdir(), `test video ${Date.now()}.mp4`);
+    tempFiles.push(outputFile);
+
+    const result = await runScript(['https://example.com', outputFile], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with different schemes', async () => {
+    const result = await runScript(['http://example.com,https://test.com'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles very long URL list', async () => {
+    const urls = Array(10).fill('https://example.com').join(',');
+    const result = await runScript([urls], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles --scroll with --fps together', async () => {
+    const result = await runScript(
+      ['https://example.com', '--scroll', '--fps', '24'],
+      {
+        CDP_SECRET: 'test-secret',
+        WORKER_URL: 'wss://invalid.test',
+      }
+    );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URL with port and path', async () => {
+    const result = await runScript(['https://example.com:8080/path/to/page'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles fractional FPS value', async () => {
+    const result = await runScript(['https://example.com', '--fps', '23.976'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles non-numeric FPS value', async () => {
+    const result = await runScript(['https://example.com', '--fps', 'abc'], {
       CDP_SECRET: 'test-secret',
       WORKER_URL: 'wss://invalid.test',
     });

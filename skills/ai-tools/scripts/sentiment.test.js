@@ -1,8 +1,3 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { spawn } from 'child_process';
-import path from 'path';
-
-const scriptPath = path.join(process.cwd(), 'skills/ai-tools/scripts/sentiment.js');
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'child_process';
 
@@ -11,13 +6,6 @@ describe('sentiment.js', () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env };
-    process.env.ANTHROPIC_API_KEY = 'test-api-key';
-  });
-
-  function runScript(args) {
-    return new Promise((resolve) => {
-      const proc = spawn('node', [scriptPath, ...args], {
-        env: process.env,
   });
 
   afterEach(() => {
@@ -25,64 +13,50 @@ describe('sentiment.js', () => {
     vi.restoreAllMocks();
   });
 
-  const runScript = (args, env = {}) => {
-    return new Promise((resolve, reject) => {
-      const proc = spawn('node', ['skills/ai-tools/scripts/sentiment.js', ...args], {
-        env: { ...process.env, ...env },
-      });
+  const runScript = async (args, env = {}) => {
+    const { main } = require('./sentiment.js');
+    const originalArgv = process.argv;
+    const originalEnv = { ...process.env };
+    process.argv = ['node', 'sentiment.js', ...args];
 
-      let stdout = '';
-      let stderr = '';
+    for (const key in env) {
+      process.env[key] = env[key];
+    }
 
-      proc.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      proc.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      proc.on('close', (exitCode) => {
-        resolve({ exitCode, stdout, stderr });
-      });
+    let stdout = '';
+    let stderr = '';
+    let exitCode = 0;
+    const spyLog = vi.spyOn(console, 'log').mockImplementation(m => { stdout += m + '\n'; });
+    const spyError = vi.spyOn(console, 'error').mockImplementation(m => { stderr += m + '\n'; });
+    const spyExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      exitCode = code;
+      const err = new Error('process.exit');
+      err.code = code;
+      throw err;
     });
-  }
 
-  describe('parseArgs', () => {
-    it('displays usage when no text is provided', async () => {
-      const result = await runScript([]);
+    try {
+      await main();
+    } catch (err) {
+      if (err.message !== 'process.exit') {
+        stderr += err.message;
+        exitCode = 1;
+      }
+    } finally {
+      process.argv = originalArgv;
+      for (const key in env) {
+        if (originalEnv[key] === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = originalEnv[key];
+        }
+      }
+      spyLog.mockRestore();
+      spyError.mockRestore();
+      spyExit.mockRestore();
+    }
 
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('Usage: node sentiment.js');
-    });
-  });
-
-  describe('API key validation', () => {
-    it('fails when no API key is provided', async () => {
-      delete process.env.ANTHROPIC_API_KEY;
-      delete process.env.AI_GATEWAY_API_KEY;
-
-      const result = await runScript(['test text']);
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('ANTHROPIC_API_KEY or AI_GATEWAY_API_KEY required');
-    });
-  });
-
-  describe('edge cases', () => {
-    it('handles single word input', async () => {
-      const result = await runScript(['test']);
-      // May fail without real API but should parse args correctly
-      expect(result.exitCode === 0 || result.exitCode === 1).toBe(true);
-    });
-      proc.on('close', (code) => {
-        resolve({ code, stdout, stderr });
-      });
-
-      proc.on('error', (err) => {
-        reject(err);
-      });
-    });
+    return { code: exitCode, stdout, stderr };
   };
 
   it('shows usage when no text is provided', async () => {
@@ -211,7 +185,7 @@ describe('sentiment.js', () => {
     global.fetch = mockFetch;
 
     const result = await runScript(
-      ['Good day', '--model', 'claude-3-sonnet-20240229'],
+      ['--model', 'claude-3-sonnet-20240229', 'Good day'],
       { ANTHROPIC_API_KEY: 'test-key' }
     );
 
@@ -370,5 +344,392 @@ describe('sentiment.js', () => {
     });
 
     expect(result.code).toBe(0);
+  });
+
+  it('handles very short text', async () => {
+    const mockAnalysis = {
+      sentiment: 'neutral',
+      score: 0.0,
+      confidence: 0.6,
+      emotions: [],
+      tone: 'brief',
+      keywords: [],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 5, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['ok'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles text with multiple emotions', async () => {
+    const mockAnalysis = {
+      sentiment: 'mixed',
+      score: 0.1,
+      confidence: 0.8,
+      emotions: [
+        { emotion: 'joy', intensity: 0.5 },
+        { emotion: 'sadness', intensity: 0.3 },
+        { emotion: 'anger', intensity: 0.2 },
+      ],
+      tone: 'complex',
+      keywords: ['happy', 'sad', 'frustrated'],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 20, output_tokens: 30 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['Complex emotional text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.analysis.emotions).toHaveLength(3);
+  });
+
+  it('handles sarcastic text', async () => {
+    const mockAnalysis = {
+      sentiment: 'mixed',
+      score: -0.3,
+      confidence: 0.7,
+      emotions: [{ emotion: 'sarcasm', intensity: 0.8 }],
+      tone: 'sarcastic',
+      keywords: ['great', 'wonderful'],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['Oh great, another bug!'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.analysis.tone).toBe('sarcastic');
+  });
+
+  it('handles network error', async () => {
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Network failed'));
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('error');
+  });
+
+  it('handles 500 server error', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => 'Internal server error',
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+    const error = JSON.parse(result.stderr);
+    expect(error.error).toContain('500');
+  });
+
+  it('includes model in output', async () => {
+    const mockAnalysis = {
+      sentiment: 'positive',
+      score: 0.7,
+      confidence: 0.9,
+      emotions: [],
+      tone: 'upbeat',
+      keywords: ['great'],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.model).toBe('claude-3-5-haiku-20241022');
+  });
+
+  it('handles emoji in text', async () => {
+    const mockAnalysis = {
+      sentiment: 'positive',
+      score: 0.9,
+      confidence: 0.95,
+      emotions: [{ emotion: 'joy', intensity: 0.9 }],
+      tone: 'enthusiastic',
+      keywords: ['love'],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['I love this! 😊🎉'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles extremely negative sentiment', async () => {
+    const mockAnalysis = {
+      sentiment: 'negative',
+      score: -0.95,
+      confidence: 0.98,
+      emotions: [{ emotion: 'disgust', intensity: 0.9 }],
+      tone: 'hostile',
+      keywords: ['terrible', 'awful', 'worst'],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 15, output_tokens: 25 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['This is the worst, most terrible thing ever'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.analysis.score).toBeLessThan(-0.9);
+  });
+
+  it('uses custom base URL when provided', async () => {
+    const mockAnalysis = {
+      sentiment: 'neutral',
+      score: 0,
+      confidence: 0.7,
+      emotions: [],
+      tone: 'neutral',
+      keywords: [],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+      AI_GATEWAY_BASE_URL: 'https://custom.api.com',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles text exactly 100 characters long', async () => {
+    const exactText = 'a'.repeat(100);
+    const mockAnalysis = {
+      sentiment: 'neutral',
+      score: 0,
+      confidence: 0.5,
+      emotions: [],
+      tone: 'monotonous',
+      keywords: [],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 25, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript([exactText], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.text).toBe(exactText);
+    expect(output.text).not.toContain('...');
+  });
+
+  it('handles text with only whitespace', async () => {
+    const mockAnalysis = {
+      sentiment: 'neutral',
+      score: 0,
+      confidence: 0.3,
+      emotions: [],
+      tone: 'empty',
+      keywords: [],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 5, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['   \t\n   '], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles response with zero confidence', async () => {
+    const mockAnalysis = {
+      sentiment: 'unclear',
+      score: 0,
+      confidence: 0,
+      emotions: [],
+      tone: 'ambiguous',
+      keywords: [],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['ambiguous text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.analysis.confidence).toBe(0);
+  });
+
+  it('handles response with maximum values', async () => {
+    const mockAnalysis = {
+      sentiment: 'positive',
+      score: 1.0,
+      confidence: 1.0,
+      emotions: [
+        { emotion: 'ecstasy', intensity: 1.0 },
+      ],
+      tone: 'euphoric',
+      keywords: ['perfect', 'amazing', 'incredible'],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 10, output_tokens: 30 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['Perfect! Amazing! Incredible!'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.analysis.score).toBe(1.0);
+    expect(output.analysis.confidence).toBe(1.0);
+  });
+
+  it('handles malformed JSON in API response', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{invalid json' }],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.analysis).toHaveProperty('parseError', true);
+    expect(output.analysis.raw).toContain('invalid json');
+  });
+
+  it('handles empty keywords array', async () => {
+    const mockAnalysis = {
+      sentiment: 'neutral',
+      score: 0,
+      confidence: 0.7,
+      emotions: [],
+      tone: 'plain',
+      keywords: [],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['The data shows results'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.analysis.keywords).toEqual([]);
   });
 });

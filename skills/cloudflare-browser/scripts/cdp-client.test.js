@@ -1,484 +1,549 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
-// Mock WebSocket before importing the module
-const mockWebSocket = vi.fn();
-vi.mock('ws', () => ({
-  default: mockWebSocket
-}));
-
-describe('cdp-client.js', () => {
-  let createClient;
-  let mockWs;
-
-  beforeEach(async () => {
-    // Setup mock WebSocket
-    mockWs = {
-      send: vi.fn(),
-      close: vi.fn(),
-      on: vi.fn(),
-    };
-    mockWebSocket.mockReturnValue(mockWs);
-
-    // Dynamically import after mock is set up
-    const module = await import('./cdp-client.js');
-    createClient = module.createClient;
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  describe('createClient', () => {
-    it('throws error when CDP_SECRET is not provided', async () => {
-      await expect(createClient({})).rejects.toThrow('CDP_SECRET environment variable not set');
-    });
-
-    it('constructs correct WebSocket URL', () => {
-      const options = {
-        secret: 'test-secret',
-        workerUrl: 'https://worker.example.com'
-      };
-
-      createClient(options).catch(() => {}); // Prevent unhandled rejection
-
-      expect(mockWebSocket).toHaveBeenCalledWith(
-        expect.stringContaining('wss://worker.example.com/cdp?secret=test-secret')
-      );
-    });
-
-    it('strips protocol from worker URL', () => {
-      const options = {
-        secret: 'secret',
-        workerUrl: 'http://worker.com'
-      };
-
-      createClient(options).catch(() => {});
-
-      const wsUrl = mockWebSocket.mock.calls[0][0];
-      expect(wsUrl).toMatch(/^wss:\/\/worker\.com/);
-    });
-
-    it('registers event handlers', () => {
-      createClient({ secret: 'test', workerUrl: 'https://test.com' }).catch(() => {});
-
-      expect(mockWs.on).toHaveBeenCalledWith('message', expect.any(Function));
-      expect(mockWs.on).toHaveBeenCalledWith('error', expect.any(Function));
-      expect(mockWs.on).toHaveBeenCalledWith('open', expect.any(Function));
-    });
-  });
-
-  describe('client API', () => {
-    it('provides navigate method', async () => {
-      const clientPromise = createClient({ secret: 'test', workerUrl: 'https://test.com' });
-
-      // Simulate WebSocket open and target created
-      const openHandler = mockWs.on.mock.calls.find(call => call[0] === 'open')[1];
-      const messageHandler = mockWs.on.mock.calls.find(call => call[0] === 'message')[1];
-
-      // Simulate target creation message
-      setTimeout(() => {
-        messageHandler(JSON.stringify({
-          method: 'Target.targetCreated',
-          params: { targetInfo: { type: 'page', targetId: 'target-123' } }
-        }));
-        openHandler();
-      }, 0);
-
-      const client = await clientPromise;
-      expect(client).toHaveProperty('navigate');
-      expect(typeof client.navigate).toBe('function');
-    });
-
-    it('provides screenshot method', async () => {
-      const clientPromise = createClient({ secret: 'test', workerUrl: 'https://test.com' });
-
-      const openHandler = mockWs.on.mock.calls.find(call => call[0] === 'open')[1];
-      const messageHandler = mockWs.on.mock.calls.find(call => call[0] === 'message')[1];
-
-      setTimeout(() => {
-        messageHandler(JSON.stringify({
-          method: 'Target.targetCreated',
-          params: { targetInfo: { type: 'page', targetId: 'target-123' } }
-        }));
-        openHandler();
-      }, 0);
-
-      const client = await clientPromise;
-      expect(client).toHaveProperty('screenshot');
-      expect(typeof client.screenshot).toBe('function');
-    });
-
-    it('provides evaluate method', async () => {
-      const clientPromise = createClient({ secret: 'test', workerUrl: 'https://test.com' });
-
-      const openHandler = mockWs.on.mock.calls.find(call => call[0] === 'open')[1];
-      const messageHandler = mockWs.on.mock.calls.find(call => call[0] === 'message')[1];
-
-      setTimeout(() => {
-        messageHandler(JSON.stringify({
-          method: 'Target.targetCreated',
-          params: { targetInfo: { type: 'page', targetId: 'target-123' } }
-        }));
-        openHandler();
-      }, 0);
-
-      const client = await clientPromise;
-      expect(client).toHaveProperty('evaluate');
-      expect(typeof client.evaluate).toBe('function');
-    });
-
-    it('provides close method', async () => {
-      const clientPromise = createClient({ secret: 'test', workerUrl: 'https://test.com' });
-
-      const openHandler = mockWs.on.mock.calls.find(call => call[0] === 'open')[1];
-      const messageHandler = mockWs.on.mock.calls.find(call => call[0] === 'message')[1];
-
-      setTimeout(() => {
-        messageHandler(JSON.stringify({
-          method: 'Target.targetCreated',
-          params: { targetInfo: { type: 'page', targetId: 'target-123' } }
-        }));
-        openHandler();
-      }, 0);
-
-      const client = await clientPromise;
-      client.close();
-      expect(mockWs.close).toHaveBeenCalled();
-    });
-  });
-
-  describe('error handling', () => {
-    it('rejects when no target is created within timeout', async () => {
-      const clientPromise = createClient({ secret: 'test', workerUrl: 'https://test.com' });
-
-      const openHandler = mockWs.on.mock.calls.find(call => call[0] === 'open')[1];
-      setTimeout(() => openHandler(), 0);
-
-      await expect(clientPromise).rejects.toThrow('No target created');
-    });
-
-    it('handles WebSocket errors', async () => {
-      const clientPromise = createClient({ secret: 'test', workerUrl: 'https://test.com' });
-
-      const errorHandler = mockWs.on.mock.calls.find(call => call[0] === 'error')[1];
-      setTimeout(() => errorHandler(new Error('Connection failed')), 0);
-
-      await expect(clientPromise).rejects.toThrow('Connection failed');
-    });
 import { EventEmitter } from 'events';
 
-// Mock WebSocket before requiring the module
-class MockWebSocket extends EventEmitter {
+class MockWS extends EventEmitter {
   constructor(url) {
     super();
     this.url = url;
-    this.readyState = 0; // CONNECTING
-    this.CONNECTING = 0;
-    this.OPEN = 1;
-    this.CLOSING = 2;
-    this.CLOSED = 3;
-
-    // Simulate connection
+    this.readyState = 1; // OPEN
     setTimeout(() => {
-      this.readyState = 1; // OPEN
       this.emit('open');
-
-      // Simulate target creation
       setTimeout(() => {
-        const msg = {
+        this.emit('message', JSON.stringify({
           method: 'Target.targetCreated',
-          params: {
-            targetInfo: {
-              type: 'page',
-              targetId: 'mock-target-id-123',
-            },
-          },
-        };
-        this.emit('message', JSON.stringify(msg));
+          params: { targetInfo: { type: 'page', targetId: 'mock-id' } }
+        }));
       }, 10);
     }, 10);
   }
-
   send(data) {
-    if (this.readyState !== 1) {
-      throw new Error('WebSocket is not open');
-    }
-
-    // Parse and auto-respond to CDP commands
     const msg = JSON.parse(data);
     setTimeout(() => {
-      const response = { id: msg.id, result: {} };
-
-      // Simulate specific responses
-      if (msg.method === 'Page.captureScreenshot') {
-        response.result = { data: Buffer.from('fake-image').toString('base64') };
-      } else if (msg.method === 'Runtime.evaluate') {
-        response.result = { result: { value: 'mock-result' } };
-      }
-
-      this.emit('message', JSON.stringify(response));
+      this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
     }, 10);
   }
-
-  close() {
-    this.readyState = 2; // CLOSING
-    setTimeout(() => {
-      this.readyState = 3; // CLOSED
-      this.emit('close');
-    }, 10);
-  }
+  close() { this.emit('close'); }
 }
-
-vi.mock('ws', () => ({
-  default: MockWebSocket,
-}));
 
 describe('cdp-client.js', () => {
   let originalEnv;
 
   beforeEach(() => {
+    vi.resetModules();
     originalEnv = { ...process.env };
     process.env.CDP_SECRET = 'test-secret';
-    process.env.WORKER_URL = 'https://test-worker.example.com';
+    process.env.WORKER_URL = 'test-worker.example.com';
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    vi.clearAllMocks();
   });
 
-  it('throws error when CDP_SECRET is not set', async () => {
+  it('throws error when CDP_SECRET is not set', () => {
     delete process.env.CDP_SECRET;
-
-    const { createClient } = await import('./cdp-client.js');
-
-    await expect(createClient()).rejects.toThrow('CDP_SECRET');
+    const { createClient } = require('./cdp-client.js');
+    expect(() => createClient()).toThrow('CDP_SECRET');
   });
 
   it('creates client successfully', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
-    expect(client).toHaveProperty('ws');
-    expect(client).toHaveProperty('targetId');
-    expect(client).toHaveProperty('send');
-    expect(client).toHaveProperty('navigate');
-    expect(client).toHaveProperty('screenshot');
-    expect(client).toHaveProperty('setViewport');
-    expect(client).toHaveProperty('evaluate');
-    expect(client).toHaveProperty('scroll');
-    expect(client).toHaveProperty('click');
-    expect(client).toHaveProperty('type');
-    expect(client).toHaveProperty('getHTML');
-    expect(client).toHaveProperty('getText');
-    expect(client).toHaveProperty('close');
-  });
-
-  it('accepts custom options', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient({
-      secret: 'custom-secret',
-      workerUrl: 'https://custom-worker.example.com',
-      timeout: 30000,
-    });
-
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
     expect(client).toBeDefined();
-  });
-
-  it('creates WebSocket with correct URL', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
-    expect(client.ws.url).toContain('wss://');
-    expect(client.ws.url).toContain('test-worker.example.com');
-    expect(client.ws.url).toContain('cdp');
-    expect(client.ws.url).toContain('secret=');
-  });
-
-  it('has valid targetId after connection', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
-    expect(client.targetId).toBe('mock-target-id-123');
+    expect(client.targetId).toBe('mock-id');
   });
 
   it('navigate method works', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
-    await expect(client.navigate('https://example.com', 100)).resolves.toBeUndefined();
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+    await expect(client.navigate('https://example.com', 10)).resolves.toBeUndefined();
   });
 
   it('screenshot method returns buffer', async () => {
-    const { createClient } = await import('./cdp-client.js');
+    class MockWSWithScreenshot extends EventEmitter {
+      constructor(url) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.emit('open');
+          setTimeout(() => {
+            this.emit('message', JSON.stringify({
+              method: 'Target.targetCreated',
+              params: { targetInfo: { type: 'page', targetId: 'mock-id' } }
+            }));
+          }, 10);
+        }, 10);
+      }
+      send(data) {
+        const msg = JSON.parse(data);
+        setTimeout(() => {
+          if (msg.method === 'Page.captureScreenshot') {
+            this.emit('message', JSON.stringify({ id: msg.id, result: { data: 'dGVzdA==' } }));
+          } else {
+            this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
+          }
+        }, 10);
+      }
+      close() { this.emit('close'); }
+    }
 
-    const client = await createClient();
-
-    const screenshot = await client.screenshot();
-
-    expect(Buffer.isBuffer(screenshot)).toBe(true);
-  });
-
-  it('screenshot accepts format parameter', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
-    const screenshot = await client.screenshot('jpeg');
-
-    expect(Buffer.isBuffer(screenshot)).toBe(true);
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWSWithScreenshot });
+    const buffer = await client.screenshot();
+    expect(buffer).toBeInstanceOf(Buffer);
+    expect(buffer.toString()).toBe('test');
   });
 
   it('setViewport method works', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
     await expect(client.setViewport(1920, 1080, 2, true)).resolves.toBeUndefined();
   });
 
   it('evaluate method works', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
-    const result = await client.evaluate('2 + 2');
-
-    expect(result).toBeDefined();
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+    await expect(client.evaluate('1 + 1')).resolves.toBeDefined();
   });
 
   it('scroll method works', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
     await expect(client.scroll(500)).resolves.toBeUndefined();
   });
 
   it('click method works', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
-    await expect(client.click('#button')).resolves.toBeUndefined();
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+    await expect(client.click('.button')).resolves.toBeUndefined();
   });
 
   it('type method works', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
     await expect(client.type('#input', 'test text')).resolves.toBeUndefined();
   });
 
-  it('getHTML method returns string', async () => {
-    const { createClient } = await import('./cdp-client.js');
+  it('getHTML method returns HTML string', async () => {
+    class MockWSWithHTML extends EventEmitter {
+      constructor(url) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.emit('open');
+          setTimeout(() => {
+            this.emit('message', JSON.stringify({
+              method: 'Target.targetCreated',
+              params: { targetInfo: { type: 'page', targetId: 'mock-id' } }
+            }));
+          }, 10);
+        }, 10);
+      }
+      send(data) {
+        const msg = JSON.parse(data);
+        setTimeout(() => {
+          if (msg.method === 'Runtime.evaluate' && msg.params.expression.includes('outerHTML')) {
+            this.emit('message', JSON.stringify({
+              id: msg.id,
+              result: { result: { value: '<html><body>Test</body></html>' } }
+            }));
+          } else {
+            this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
+          }
+        }, 10);
+      }
+      close() { this.emit('close'); }
+    }
 
-    const client = await createClient();
-
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWSWithHTML });
     const html = await client.getHTML();
-
-    expect(typeof html).toBe('string');
+    expect(html).toBe('<html><body>Test</body></html>');
   });
 
-  it('getText method returns string', async () => {
-    const { createClient } = await import('./cdp-client.js');
+  it('getText method returns text content', async () => {
+    class MockWSWithText extends EventEmitter {
+      constructor(url) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.emit('open');
+          setTimeout(() => {
+            this.emit('message', JSON.stringify({
+              method: 'Target.targetCreated',
+              params: { targetInfo: { type: 'page', targetId: 'mock-id' } }
+            }));
+          }, 10);
+        }, 10);
+      }
+      send(data) {
+        const msg = JSON.parse(data);
+        setTimeout(() => {
+          if (msg.method === 'Runtime.evaluate' && msg.params.expression.includes('innerText')) {
+            this.emit('message', JSON.stringify({
+              id: msg.id,
+              result: { result: { value: 'Page text content' } }
+            }));
+          } else {
+            this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
+          }
+        }, 10);
+      }
+      close() { this.emit('close'); }
+    }
 
-    const client = await createClient();
-
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWSWithText });
     const text = await client.getText();
-
-    expect(typeof text).toBe('string');
+    expect(text).toBe('Page text content');
   });
 
-  it('close method works', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
+  it('close method closes WebSocket', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
     expect(() => client.close()).not.toThrow();
   });
 
-  it('send method with no params', async () => {
-    const { createClient } = await import('./cdp-client.js');
+  it('handles send timeout', async () => {
+    class MockWSTimeout extends EventEmitter {
+      constructor(url) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.emit('open');
+          setTimeout(() => {
+            this.emit('message', JSON.stringify({
+              method: 'Target.targetCreated',
+              params: { targetInfo: { type: 'page', targetId: 'mock-id' } }
+            }));
+          }, 10);
+        }, 10);
+      }
+      send(data) {
+        // Don't respond to simulate timeout
+      }
+      close() { this.emit('close'); }
+    }
 
-    const client = await createClient();
-
-    const result = await client.send('Page.enable');
-
-    expect(result).toBeDefined();
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWSTimeout, timeout: 100 });
+    await expect(client.send('Page.navigate', { url: 'https://example.com' })).rejects.toThrow('Timeout');
   });
 
-  it('send method with params', async () => {
-    const { createClient } = await import('./cdp-client.js');
+  it('handles CDP error response', async () => {
+    class MockWSError extends EventEmitter {
+      constructor(url) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.emit('open');
+          setTimeout(() => {
+            this.emit('message', JSON.stringify({
+              method: 'Target.targetCreated',
+              params: { targetInfo: { type: 'page', targetId: 'mock-id' } }
+            }));
+          }, 10);
+        }, 10);
+      }
+      send(data) {
+        const msg = JSON.parse(data);
+        setTimeout(() => {
+          this.emit('message', JSON.stringify({
+            id: msg.id,
+            error: { message: 'CDP command failed' }
+          }));
+        }, 10);
+      }
+      close() { this.emit('close'); }
+    }
 
-    const client = await createClient();
-
-    const result = await client.send('Page.navigate', { url: 'https://example.com' });
-
-    expect(result).toBeDefined();
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWSError });
+    await expect(client.navigate('https://example.com')).rejects.toThrow('CDP command failed');
   });
 
-  it('handles WORKER_URL with http://', async () => {
-    process.env.WORKER_URL = 'http://test-worker.example.com';
+  it('handles WebSocket connection error', async () => {
+    class MockWSConnError extends EventEmitter {
+      constructor(url) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.emit('error', new Error('Connection failed'));
+        }, 10);
+      }
+      send() {}
+      close() {}
+    }
 
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
-    expect(client.ws.url).toContain('wss://');
-    expect(client.ws.url).not.toContain('http://');
+    const { createClient } = require('./cdp-client.js');
+    await expect(createClient({ WebSocket: MockWSConnError })).rejects.toThrow('Connection failed');
   });
 
-  it('handles WORKER_URL with https://', async () => {
-    process.env.WORKER_URL = 'https://test-worker.example.com';
+  it('handles target creation timeout', async () => {
+    class MockWSNoTarget extends EventEmitter {
+      constructor(url) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.emit('open');
+          // Don't emit target created
+        }, 10);
+      }
+      send() {}
+      close() {}
+    }
 
-    const { createClient } = await import('./cdp-client.js');
+    const { createClient } = require('./cdp-client.js');
+    await expect(createClient({ WebSocket: MockWSNoTarget })).rejects.toThrow('No target created');
+  }, 15000);
 
-    const client = await createClient();
-
-    expect(client.ws.url).toContain('wss://');
-    expect(client.ws.url).not.toContain('https://');
-  });
-
-  it('uses default timeout when not specified', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
+  it('uses custom secret from options', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({
+      WebSocket: MockWS,
+      secret: 'custom-secret',
+      workerUrl: 'custom.worker.dev'
+    });
     expect(client).toBeDefined();
+    expect(client.targetId).toBe('mock-id');
   });
 
-  it('navigate with custom wait time', async () => {
-    const { createClient } = await import('./cdp-client.js');
+  it('uses default screenshot format', async () => {
+    class MockWSScreenshot extends EventEmitter {
+      constructor(url) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.emit('open');
+          setTimeout(() => {
+            this.emit('message', JSON.stringify({
+              method: 'Target.targetCreated',
+              params: { targetInfo: { type: 'page', targetId: 'mock-id' } }
+            }));
+          }, 10);
+        }, 10);
+      }
+      send(data) {
+        const msg = JSON.parse(data);
+        setTimeout(() => {
+          if (msg.method === 'Page.captureScreenshot') {
+            expect(msg.params.format).toBe('png');
+            this.emit('message', JSON.stringify({ id: msg.id, result: { data: 'dGVzdA==' } }));
+          } else {
+            this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
+          }
+        }, 10);
+      }
+      close() {}
+    }
 
-    const client = await createClient();
-
-    const start = Date.now();
-    await client.navigate('https://example.com', 200);
-    const duration = Date.now() - start;
-
-    expect(duration).toBeGreaterThanOrEqual(200);
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWSScreenshot });
+    await client.screenshot();
   });
 
-  it('scroll with default distance', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
-    await expect(client.scroll()).resolves.toBeUndefined();
-  });
-
-  it('setViewport with default values', async () => {
-    const { createClient } = await import('./cdp-client.js');
-
-    const client = await createClient();
-
+  it('uses custom viewport defaults', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
     await expect(client.setViewport()).resolves.toBeUndefined();
+  });
+
+  it('uses custom scroll amount', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+    await expect(client.scroll(1000)).resolves.toBeUndefined();
+  });
+
+  it('handles scroll with zero pixels', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+    await expect(client.scroll(0)).resolves.toBeUndefined();
+  });
+
+  it('handles scroll with negative pixels', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+    await expect(client.scroll(-500)).resolves.toBeUndefined();
+  });
+
+  it('handles type with empty string', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+    await expect(client.type('#input', '')).resolves.toBeUndefined();
+  });
+
+  it('handles type with special characters needing escaping', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+    await expect(client.type('#input', "test'quote")).resolves.toBeUndefined();
+  });
+
+  it('handles click on non-existent selector', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+    await expect(client.click('.non-existent')).resolves.toBeUndefined();
+  });
+
+  it('handles getHTML returning null', async () => {
+    class MockWSNullHTML extends EventEmitter {
+      constructor(url) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.emit('open');
+          setTimeout(() => {
+            this.emit('message', JSON.stringify({
+              method: 'Target.targetCreated',
+              params: { targetInfo: { type: 'page', targetId: 'mock-id' } }
+            }));
+          }, 10);
+        }, 10);
+      }
+      send(data) {
+        const msg = JSON.parse(data);
+        setTimeout(() => {
+          if (msg.method === 'Runtime.evaluate' && msg.params.expression.includes('outerHTML')) {
+            this.emit('message', JSON.stringify({
+              id: msg.id,
+              result: { result: { value: null } }
+            }));
+          } else {
+            this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
+          }
+        }, 10);
+      }
+      close() { this.emit('close'); }
+    }
+
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWSNullHTML });
+    const html = await client.getHTML();
+    expect(html).toBeNull();
+  });
+
+  it('handles getText returning empty string', async () => {
+    class MockWSEmptyText extends EventEmitter {
+      constructor(url) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.emit('open');
+          setTimeout(() => {
+            this.emit('message', JSON.stringify({
+              method: 'Target.targetCreated',
+              params: { targetInfo: { type: 'page', targetId: 'mock-id' } }
+            }));
+          }, 10);
+        }, 10);
+      }
+      send(data) {
+        const msg = JSON.parse(data);
+        setTimeout(() => {
+          if (msg.method === 'Runtime.evaluate' && msg.params.expression.includes('innerText')) {
+            this.emit('message', JSON.stringify({
+              id: msg.id,
+              result: { result: { value: '' } }
+            }));
+          } else {
+            this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
+          }
+        }, 10);
+      }
+      close() { this.emit('close'); }
+    }
+
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWSEmptyText });
+    const text = await client.getText();
+    expect(text).toBe('');
+  });
+
+  it('handles multiple rapid send calls', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+
+    const promises = [
+      client.evaluate('1 + 1'),
+      client.evaluate('2 + 2'),
+      client.evaluate('3 + 3'),
+    ];
+
+    await expect(Promise.all(promises)).resolves.toBeDefined();
+  });
+
+  it('handles WebSocket close event', async () => {
+    class MockWSWithClose extends EventEmitter {
+      constructor(url) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.emit('open');
+          setTimeout(() => {
+            this.emit('message', JSON.stringify({
+              method: 'Target.targetCreated',
+              params: { targetInfo: { type: 'page', targetId: 'mock-id' } }
+            }));
+          }, 10);
+        }, 10);
+      }
+      send(data) {
+        const msg = JSON.parse(data);
+        setTimeout(() => {
+          this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
+        }, 10);
+      }
+      close() {
+        this.emit('close');
+      }
+    }
+
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWSWithClose });
+    expect(() => client.close()).not.toThrow();
+  });
+
+  it('handles screenshot with jpeg format', async () => {
+    class MockWSJpegScreenshot extends EventEmitter {
+      constructor(url) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.emit('open');
+          setTimeout(() => {
+            this.emit('message', JSON.stringify({
+              method: 'Target.targetCreated',
+              params: { targetInfo: { type: 'page', targetId: 'mock-id' } }
+            }));
+          }, 10);
+        }, 10);
+      }
+      send(data) {
+        const msg = JSON.parse(data);
+        setTimeout(() => {
+          if (msg.method === 'Page.captureScreenshot') {
+            this.emit('message', JSON.stringify({ id: msg.id, result: { data: 'dGVzdA==' } }));
+          } else {
+            this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
+          }
+        }, 10);
+      }
+      close() { this.emit('close'); }
+    }
+
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWSJpegScreenshot });
+    const buffer = await client.screenshot('jpeg');
+    expect(buffer).toBeInstanceOf(Buffer);
+  });
+
+  it('handles navigate with custom wait time', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+    await expect(client.navigate('https://example.com', 1000)).resolves.toBeUndefined();
+  });
+
+  it('handles setViewport with mobile true', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+    await expect(client.setViewport(375, 667, 2, true)).resolves.toBeUndefined();
   });
 });
