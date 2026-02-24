@@ -1,17 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-
-const scriptPath = path.join(process.cwd(), 'skills/cloudflare-browser/scripts/screenshot.js');
-
-describe('screenshot.js', () => {
-  let originalEnv;
-
-  beforeEach(() => {
-    originalEnv = { ...process.env };
-    process.env.CDP_SECRET = 'test-secret';
-    process.env.WORKER_URL = 'https://worker.example.com';
 import { existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -26,18 +14,6 @@ describe('screenshot.js', () => {
 
   afterEach(() => {
     process.env = originalEnv;
-    // Clean up test files
-    const testFile = 'test-screenshot.png';
-    if (fs.existsSync(testFile)) {
-      fs.unlinkSync(testFile);
-    }
-  });
-
-  function runScript(args) {
-    return new Promise((resolve) => {
-      const proc = spawn('node', [scriptPath, ...args], {
-        env: process.env,
-        timeout: 5000
     tempFiles.forEach((file) => {
       if (existsSync(file)) {
         try {
@@ -69,64 +45,6 @@ describe('screenshot.js', () => {
         stderr += data.toString();
       });
 
-      proc.on('close', (exitCode) => {
-        resolve({ exitCode, stdout, stderr });
-      });
-    });
-  }
-
-  describe('environment validation', () => {
-    it('fails when CDP_SECRET is not set', async () => {
-      delete process.env.CDP_SECRET;
-
-      const result = await runScript(['https://example.com']);
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('CDP_SECRET environment variable not set');
-    });
-
-    it('requires WORKER_URL to be set', async () => {
-      delete process.env.WORKER_URL;
-
-      const result = await runScript(['https://example.com']);
-
-      expect(result.exitCode).toBe(1);
-    });
-  });
-
-  describe('argument parsing', () => {
-    it('displays usage when no URL is provided', async () => {
-      const result = await runScript([]);
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('Usage: node screenshot.js');
-    });
-
-    it('uses default output filename', async () => {
-      // This test would require mocking WebSocket which is complex
-      // Just verify the script accepts the argument
-      const result = await runScript(['https://example.com']);
-      // Will fail due to WebSocket but at least validates arg parsing
-      expect(result.stderr).not.toContain('Usage:');
-    });
-
-    it('accepts custom output filename', async () => {
-      const result = await runScript(['https://example.com', 'custom.png']);
-      // Will fail due to WebSocket but validates arg parsing
-      expect(result.stderr).not.toContain('Usage:');
-    });
-  });
-
-  describe('URL handling', () => {
-    it('accepts HTTP URLs', async () => {
-      const result = await runScript(['http://example.com']);
-      expect(result.stderr).not.toContain('Usage:');
-    });
-
-    it('accepts HTTPS URLs', async () => {
-      const result = await runScript(['https://example.com']);
-      expect(result.stderr).not.toContain('Usage:');
-    });
       proc.on('close', (code) => {
         resolve({ code, stdout, stderr });
       });
@@ -301,6 +219,207 @@ describe('screenshot.js', () => {
         WORKER_URL: 'wss://invalid.test',
       }
     );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with fragments', async () => {
+    const result = await runScript(['https://example.com/page#section'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles localhost URLs', async () => {
+    const result = await runScript(['http://localhost:3000'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles IP address URLs', async () => {
+    const result = await runScript(['http://192.168.1.1'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles file extensions in output filename', async () => {
+    const result = await runScript(['https://example.com', 'my-screenshot.png'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles output filename without extension', async () => {
+    const result = await runScript(['https://example.com', 'screenshot'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles subdomain URLs', async () => {
+    const result = await runScript(['https://sub.domain.example.com'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with ports', async () => {
+    const result = await runScript(['https://example.com:8080'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with encoded characters', async () => {
+    const result = await runScript(['https://example.com/path%20with%20spaces'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles output path with directory that needs creation', async () => {
+    const result = await runScript(['https://example.com', 'output/nested/screenshot.png'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles absolute output paths', async () => {
+    const result = await runScript(['https://example.com', '/tmp/absolute-screenshot.png'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with query parameters', async () => {
+    const result = await runScript(['https://example.com?param=value&other=test'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with hash fragments', async () => {
+    const result = await runScript(['https://example.com#section'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles IP addresses as URLs', async () => {
+    const result = await runScript(['https://192.168.1.1'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles localhost URLs', async () => {
+    const result = await runScript(['http://localhost:3000'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles file:// protocol URLs', async () => {
+    const result = await runScript(['file:///path/to/file.html'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('shows error when CDP_SECRET is empty string', async () => {
+    const result = await runScript(['https://example.com'], {
+      CDP_SECRET: '',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('CDP_SECRET');
+  });
+
+  it('handles WORKER_URL with trailing slash', async () => {
+    const result = await runScript(['https://example.com'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test/',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles very complex query strings in URLs', async () => {
+    const complexQuery = 'https://example.com/?' + Array(50)
+      .fill(0)
+      .map((_, i) => `param${i}=value${i}`)
+      .join('&');
+
+    const result = await runScript([complexQuery], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles multiple consecutive URL arguments (uses first)', async () => {
+    const result = await runScript(
+      ['https://first.com', 'output.png', 'https://second.com'],
+      {
+        CDP_SECRET: 'test-secret',
+        WORKER_URL: 'wss://invalid.test',
+      }
+    );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles output path that needs directory creation', async () => {
+    const result = await runScript(
+      ['https://example.com', 'new/nested/dir/screenshot.png'],
+      {
+        CDP_SECRET: 'test-secret',
+        WORKER_URL: 'wss://invalid.test',
+      }
+    );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles WORKER_URL with multiple protocol prefixes', async () => {
+    const result = await runScript(['https://example.com'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'https://https://test-worker.com',
+    });
 
     expect(result.stderr).not.toContain('Usage');
   });
