@@ -15,6 +15,34 @@
 
 const DefaultWebSocket = require('ws');
 
+/**
+ * Create and initialize a CDP client connected to a worker via WebSocket.
+ *
+ * The returned client is bound to a WebSocket session and provides high-level
+ * methods to control a page target (navigation, screenshots, evaluation, DOM
+ * interaction, viewport emulation, and session closure).
+ *
+ * @param {Object} [options] - Configuration overrides.
+ * @param {Function} [options.WebSocket] - Optional WebSocket constructor to use instead of the default `ws` package.
+ * @param {string} [options.secret] - CDP secret token; falls back to the `CDP_SECRET` environment variable if omitted.
+ * @param {string} [options.workerUrl] - Worker host (with or without protocol) or falls back to `WORKER_URL` environment variable.
+ * @param {number} [options.timeout=60000] - Default timeout in milliseconds for individual CDP requests.
+ * @throws {Error} If no CDP secret is provided via `options.secret` or `CDP_SECRET` environment variable.
+ * @returns {Promise<Object>} A promise that resolves to a client object with the following properties and methods:
+ *   - ws: underlying WebSocket instance
+ *   - targetId: CDP page target id
+ *   - send(method, params): send a raw CDP command
+ *   - navigate(url, waitMs): navigate the page and wait for an optional delay
+ *   - screenshot(format): capture a screenshot, returned as a Buffer
+ *   - setViewport(width, height, scale, mobile): set emulation device metrics
+ *   - evaluate(expression): run JavaScript in the page context
+ *   - scroll(y): scroll the page by y pixels
+ *   - click(selector): click an element matched by selector
+ *   - type(selector, text): set element value and dispatch an input event
+ *   - getHTML(): return document.documentElement.outerHTML
+ *   - getText(): return document.body.innerText
+ *   - close(): close the underlying WebSocket
+ */
 function createClient(options = {}) {
   const WebSocket = options.WebSocket || DefaultWebSocket;
   const CDP_SECRET = options.secret || process.env.CDP_SECRET;
