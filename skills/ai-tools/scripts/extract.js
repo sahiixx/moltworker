@@ -6,9 +6,16 @@
  */
 
 /**
- * Parse command-line arguments into an options object.
- * @param {string[]} args - CLI arguments
- * @returns {{text: string, schema: string|null, model: string}} Options.
+ * Convert an array of CLI arguments into an options object containing text, schema, and model.
+ *
+ * Recognizes the flags `--schema <value>` and `--model <value>`. All non-flag positional arguments
+ * are joined with spaces and returned as the `text` field.
+ *
+ * @param {string[]} args - CLI arguments (typically process.argv.slice(2)).
+ * @returns {{text: string, schema: string|null, model: string}} An object with:
+ *   - text: joined positional arguments,
+ *   - schema: value provided to `--schema` or `null` if not specified,
+ *   - model: value provided to `--model` or the default 'claude-3-5-sonnet-20241022'.
  */
 function parseArgs(args) {
   const result = {
@@ -34,11 +41,18 @@ function parseArgs(args) {
 }
 
 /**
- * Extract structured data from text using an Anthropic-compatible API.
- * @param {string} text - The input text.
- * @param {string} schema - The JSON schema (or description).
- * @param {string} model - The model identifier.
- * @returns {{extracted: Object, model: string, usage: Object}} The extraction result.
+ * Extract structured data from input text according to a provided JSON schema or specification using an Anthropic-compatible API.
+ *
+ * @param {string} text - The input text to extract data from.
+ * @param {string} schema - A JSON schema or human-readable specification describing the desired output structure.
+ * @param {string} model - The model identifier to use for extraction.
+ * @returns {{extracted: Object, model: string, usage: {input_tokens: number, output_tokens: number}}}
+ *   An object containing:
+ *   - `extracted`: the parsed JSON object returned by the model, or `{ raw: string, parseError: true }` if parsing failed.
+ *   - `model`: the model identifier used.
+ *   - `usage`: token usage information with `input_tokens` and `output_tokens`.
+ * @throws {Error} If no API key is configured via ANTHROPIC_API_KEY or AI_GATEWAY_API_KEY.
+ * @throws {Error} If the API responds with a non-OK status; the error message includes the status and server response.
  */
 async function extractData(text, schema, model) {
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_API_KEY;
@@ -99,7 +113,11 @@ IMPORTANT: Return ONLY a valid JSON object. No preamble or explanation.`;
 }
 
 /**
- * Entry point for the script.
+ * Execute the CLI workflow: parse command-line arguments, validate required inputs, perform data extraction, and print the JSON result or an error.
+ *
+ * If required inputs are missing, prints usage information and exits with code 1.
+ * On successful extraction, prints the pretty-printed JSON result to stdout.
+ * On extraction failure, prints an error object to stderr and exits with code 1.
  */
 async function main() {
   const args = process.argv.slice(2);

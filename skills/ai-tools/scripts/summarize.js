@@ -9,9 +9,22 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * Parse command-line arguments into an options object.
- * @param {string[]} args - CLI arguments
- * @returns {{text: string, length: number, style: string, isFile: boolean, model: string}} Options.
+ * Convert CLI arguments into an options object for summarization.
+ *
+ * Supports flags:
+ *  - --length <number> : target summary length in words (default 100)
+ *  - --style <string>  : summary style (default "brief")
+ *  - --file            : treat the positional input as a file path
+ *  - --model <string>  : model identifier (default "claude-3-5-sonnet-20241022")
+ * Positional arguments are joined with spaces to form the input text.
+ *
+ * @param {string[]} args - Array of command-line arguments (typically process.argv.slice(2)).
+ * @returns {{text: string, length: number, style: string, isFile: boolean, model: string}} An options object containing:
+ *  - text: concatenated positional arguments
+ *  - length: target number of words for the summary
+ *  - style: requested summary style
+ *  - isFile: true if --file was specified
+ *  - model: model identifier to use
  */
 function parseArgs(args) {
   const result = {
@@ -44,7 +57,23 @@ function parseArgs(args) {
 }
 
 /**
- * Summarize text using an Anthropic-compatible API.
+ * Generate a concise summary of input text using an Anthropic-compatible model.
+ *
+ * @param {string} text - The text to summarize.
+ * @param {number} length - Target word count for the summary.
+ * @param {string} style - Desired summary style; expected values include "brief", "detailed", or "bullets".
+ * @param {string} model - Model identifier to send to the API.
+ * @returns {{summary: string, style: string, targetWords: number, actualWords: number, originalLength: number, model: string, usage: {input_tokens: number, output_tokens: number}}}
+ *   An object containing:
+ *   - `summary`: the generated summary text.
+ *   - `style`: the requested style.
+ *   - `targetWords`: the requested target word count.
+ *   - `actualWords`: the word count of the returned summary.
+ *   - `originalLength`: the character length of the input text.
+ *   - `model`: the model used for generation.
+ *   - `usage`: token usage details (`input_tokens` and `output_tokens`).
+ * @throws {Error} If neither ANTHROPIC_API_KEY nor AI_GATEWAY_API_KEY is set.
+ * @throws {Error} If the API responds with a non-OK status; the error includes status and response text.
  */
 async function summarizeText(text, length, style, model) {
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_API_KEY;
@@ -101,7 +130,15 @@ Return ONLY the summary. No introduction or extra text.`;
 }
 
 /**
- * Entry point.
+ * Orchestrates CLI argument parsing, input acquisition, summarization, and JSON output.
+ *
+ * Parses command-line options, reads input text (or a file when --file is set), calls
+ * summarizeText(...) with the configured length, style, and model, and prints the
+ * resulting summary object as pretty-printed JSON to stdout.
+ *
+ * If no input is provided, prints usage instructions and exits with code 1. On errors
+ * (including missing file or API failures) prints a JSON error object to stderr and
+ * exits with code 1.
  */
 async function main() {
   const args = process.argv.slice(2);

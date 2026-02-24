@@ -22,13 +22,13 @@ const PBKDF2_ITERATIONS = 600000;
  * Parse command-line arguments into an options object.
  *
  * Recognizes the flags `--password <value>`, `--key <value>`, and `--output <file>`.
- * Any first positional argument that does not start with `--` is treated as the data to encrypt.
+ * The first positional argument that does not start with `--` is treated as the data to encrypt.
  *
- * @returns {{data: string, password: string|null, key: string|null, output: string|null}} An object containing:
- *  - `data`: the positional data string (empty string if not provided),
- *  - `password`: the password value or `null`,
- *  - `key`: the raw hex key string or `null`,
- *  - `output`: the output file path or `null`.
+ * @returns {{data: string|null, password: string|null, key: string|null, output: string|null}} An object containing:
+ *  - `data`: the positional data string, or `null` if not provided,
+ *  - `password`: the password value, or `null` if not supplied,
+ *  - `key`: the raw hex key string, or `null` if not supplied,
+ *  - `output`: the output file path, or `null` if not supplied.
  */
 function parseArgs() {
   const result = {
@@ -87,9 +87,9 @@ function encrypt(data, key) {
 }
 
 /**
- * Run the CLI: validate arguments, derive or parse the encryption key, perform AES-256-GCM encryption, and emit the resulting JSON.
+ * Parse CLI arguments, encrypt the provided data with AES-256-GCM using either a password-derived or raw key, and emit the result as JSON.
  *
- * If a password is provided, a random salt is generated and PBKDF2 (SHA-256) is used to derive a 256-bit key; if a raw key is provided it must be a 64-character hex string and is used directly. The command outputs a JSON object containing algorithm, base64-encoded iv, tag, and ciphertext, and—when password-based derivation was used—salt (base64), kdf, and iterations. When `--output` is given the JSON is written to the specified file and a short success JSON is printed; on invalid usage or runtime errors the function prints an error JSON and exits the process with code 1.
+ * When `--password` is supplied a random 16-byte salt is generated and a 256-bit key is derived via PBKDF2-SHA256; when `--key` is supplied the value must be a 64-character hex string and is used directly. The output JSON contains `algorithm`, base64-encoded `iv`, `tag`, and `ciphertext`; when a password was used the JSON also includes `salt` (base64), `kdf`, and `iterations`. If `--output` is provided the JSON is written to the specified file and a short success JSON is printed; on invalid usage or runtime error the function prints an error JSON to stderr and exits the process with code 1.
  */
 function main() {
   const options = parseArgs();

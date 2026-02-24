@@ -9,9 +9,18 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * Parse command-line arguments into an options object.
- * @param {string[]} args - CLI arguments
- * @returns {{image: string, prompt: string, model: string, detail: string}} Options.
+ * Parse CLI arguments into an options object for image analysis.
+ *
+ * Supports flags `--model <value>` and `--detail <value>`. The first
+ * non-flag positional argument is treated as the image path or URL;
+ * any remaining positional arguments are joined with spaces to form the prompt.
+ *
+ * @param {string[]} args - Array of command-line tokens (e.g., process.argv.slice(...)).
+ * @returns {{image: string, prompt: string, model: string, detail: string}} An options object:
+ *   - `image`: image path or URL (empty string if not provided)
+ *   - `prompt`: prompt text to send to the analyzer
+ *   - `model`: model identifier to use
+ *   - `detail`: requested detail level (e.g., "auto" or explicit value)
  */
 function parseArgs(args) {
   const result = {
@@ -45,7 +54,16 @@ function parseArgs(args) {
 }
 
 /**
- * Analyze an image using an Anthropic-compatible Vision API.
+ * Analyze an image with a multimodal Anthropic-compatible Vision API and return the model's textual analysis.
+ *
+ * @param {string} imagePath - URL or local filesystem path to the image to analyze. If a URL is provided the image is fetched; otherwise the file is read.
+ * @param {string} prompt - Text prompt describing what to ask the model about the image.
+ * @param {string} model - Model identifier to use for the analysis.
+ * @param {string} detail - Detail level hint for the analysis (e.g., "auto", "high"); passed through to the API payload.
+ * @returns {{model: string, analysis: string, usage: {input_tokens: number, output_tokens: number}}} An object containing the model id, the analysis text produced by the model, and token usage counts.
+ * @throws {Error} If neither ANTHROPIC_API_KEY nor AI_GATEWAY_API_KEY is set in the environment.
+ * @throws {Error} If a local image path does not exist.
+ * @throws {Error} If the API responds with a non-OK status; the error message includes the HTTP status and response text.
  */
 async function analyzeImage(imagePath, prompt, model, detail) {
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_API_KEY;
@@ -123,7 +141,9 @@ async function analyzeImage(imagePath, prompt, model, detail) {
 }
 
 /**
- * Entry point.
+ * Run the CLI: parse command-line arguments, analyze an image, and print the JSON result.
+ *
+ * Parses command-line arguments, validates that an image path or URL was provided (prints usage and exits with code 1 if missing), calls analyzeImage with the parsed options, and writes the analysis result as pretty-printed JSON to stdout. On error, writes a JSON object with an `error` message to stderr and exits with code 1.
  */
 async function main() {
   const args = process.argv.slice(2);

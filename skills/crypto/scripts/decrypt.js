@@ -19,16 +19,16 @@ const TAG_LENGTH = 16;
  * Parse command-line arguments into an options object.
  *
  * Supported flags:
- * - `--password <value>`: set the password for key derivation.
- * - `--key <hex>`: set the hex-encoded 32-byte key.
- * - `--file <path>`: set a path to a file containing the encrypted JSON payload.
+ * - `--password <value>`: password for key derivation.
+ * - `--key <hex>`: hex-encoded 32-byte key.
+ * - `--file <path>`: path to a file containing the encrypted JSON payload.
  * A single non-flag argument is interpreted as inline encrypted JSON data.
  *
- * @returns {{data: string, password: string|null, key: string|null, file: string|null}} An object with:
- * - `data`: inline encrypted JSON string (empty if not provided),
- * - `password`: provided password or `null`,
- * - `key`: provided hex key or `null`,
- * - `file`: provided file path or `null`.
+ * @returns {{data: string|null, password: string|null, key: string|null, file: string|null}} An object with:
+ * - `data`: inline encrypted JSON string, or `null` if not provided.
+ * - `password`: provided password, or `null` if not provided.
+ * - `key`: provided hex key, or `null` if not provided.
+ * - `file`: provided file path, or `null` if not provided.
  */
 function parseArgs() {
   const result = {
@@ -91,9 +91,9 @@ function decrypt(encrypted, key) {
 }
 
 /**
- * CLI entry point that decrypts AES-256-GCM encrypted JSON using a password or raw key.
+ * CLI entry point to decrypt an AES-256-GCM encrypted JSON payload using a password or raw key.
  *
- * Parses command-line options, loads encrypted JSON from an inline argument or a file, derives a 32-byte key from a provided password (using the embedded salt and iterations) or accepts a hex-encoded 256-bit key, decrypts the payload, and writes a structured JSON result containing `success`, `plaintext`, and `algorithm`. On failure prints a structured error JSON message and exits with code 1.
+ * Parses command-line options, reads encrypted JSON from an inline argument or file, derives a 32-byte key from a provided password (using the payload's salt and iterations) or accepts a hex-encoded 256-bit key, decrypts the payload, and writes a structured JSON object with `success`, `plaintext`, and `algorithm` to stdout. On error prints a structured JSON error message to stderr and exits with code 1.
  */
 function main() {
   const options = parseArgs();
