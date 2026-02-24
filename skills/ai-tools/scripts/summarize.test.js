@@ -362,4 +362,192 @@ describe('summarize.js', () => {
     const output = JSON.parse(result.stdout);
     expect(output.style).toBe('unknown');
   });
+
+  it('handles very short text that needs no summarization', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Short text.' }],
+        usage: { input_tokens: 5, output_tokens: 5 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['Short text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles extremely long files', async () => {
+    const tempFile = join(tmpdir(), `test-long-${Date.now()}.txt`);
+    tempFiles.push(tempFile);
+    const longContent = 'This is a very long document. '.repeat(1000);
+    writeFileSync(tempFile, longContent);
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Summary of very long document.' }],
+        usage: { input_tokens: 5000, output_tokens: 50 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript([tempFile, '--file'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.originalLength).toBe(longContent.length);
+  });
+
+  it('handles network timeout error', async () => {
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Request timeout'));
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('error');
+  });
+
+  it('handles 401 unauthorized error', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => 'Invalid API key',
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'bad-key',
+    });
+
+    expect(result.code).toBe(1);
+    const error = JSON.parse(result.stderr);
+    expect(error.error).toContain('401');
+  });
+
+  it('handles very large target word length', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'A'.repeat(2000) }],
+        usage: { input_tokens: 100, output_tokens: 500 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--length', '2000'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.targetWords).toBe(2000);
+  });
+
+  it('handles file with special characters', async () => {
+    const tempFile = join(tmpdir(), `test-special-${Date.now()}.txt`);
+    tempFiles.push(tempFile);
+    writeFileSync(tempFile, 'Text with "quotes" and <special> & characters');
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Summary of special text.' }],
+        usage: { input_tokens: 20, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript([tempFile, '--file'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('combines multiple command line options', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '- Point 1\n- Point 2\n- Point 3' }],
+        usage: { input_tokens: 100, output_tokens: 30 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['text', '--length', '50', '--style', 'bullets', '--model', 'claude-3-opus-20240229'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.targetWords).toBe(50);
+    expect(output.style).toBe('bullets');
+    expect(output.model).toBe('claude-3-opus-20240229');
+  });
+
+  it('handles file read permission error', async () => {
+    const result = await runScript(['/root/nonexistent.txt', '--file'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+    const error = JSON.parse(result.stderr);
+    expect(error.error).toContain('File not found');
+  });
+
+  it('verifies summary contains all metadata', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Complete summary text here.' }],
+        usage: { input_tokens: 100, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['input text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output).toHaveProperty('summary');
+    expect(output).toHaveProperty('style');
+    expect(output).toHaveProperty('targetWords');
+    expect(output).toHaveProperty('actualWords');
+    expect(output).toHaveProperty('originalLength');
+    expect(output).toHaveProperty('model');
+    expect(output).toHaveProperty('usage');
+  });
+
+  it('handles file with unicode content', async () => {
+    const tempFile = join(tmpdir(), `test-unicode-${Date.now()}.txt`);
+    tempFiles.push(tempFile);
+    writeFileSync(tempFile, 'Hello 世界 مرحبا Привет');
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Multilingual greeting summary.' }],
+        usage: { input_tokens: 20, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript([tempFile, '--file'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
 });
