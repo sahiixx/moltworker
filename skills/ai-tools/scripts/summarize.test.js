@@ -362,4 +362,408 @@ describe('summarize.js', () => {
     const output = JSON.parse(result.stdout);
     expect(output.style).toBe('unknown');
   });
+
+  it('handles very short text input', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Hi' }],
+        usage: { input_tokens: 5, output_tokens: 2 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['Hi'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.originalLength).toBe(2);
+  });
+
+  it('handles multi-word text arguments', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Summary of multiple words.' }],
+        usage: { input_tokens: 20, output_tokens: 15 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['This', 'is', 'multiple', 'words'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles very large length parameter', async () => {
+    const longSummary = 'word '.repeat(500);
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: longSummary }],
+        usage: { input_tokens: 100, output_tokens: 500 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--length', '10000'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.targetWords).toBe(10000);
+  });
+
+  it('handles network errors', async () => {
+    const mockFetch = vi.fn().mockImplementation(() =>
+      Promise.reject(new Error('Connection reset'))
+    );
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+  });
+
+  it('handles rate limit errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => 'Too many requests',
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+    const error = JSON.parse(result.stderr);
+    expect(error.error).toContain('429');
+  });
+
+  it('handles file with special characters', async () => {
+    const tempFile = join(tmpdir(), `test-summarize-special-${Date.now()}.txt`);
+    tempFiles.push(tempFile);
+    const content = 'Text with "quotes" and \'apostrophes\' & symbols!';
+    writeFileSync(tempFile, content);
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Summary of special text.' }],
+        usage: { input_tokens: 50, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript([tempFile, '--file'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('tracks token usage accurately', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Summary.' }],
+        usage: { input_tokens: 250, output_tokens: 50 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.usage.input_tokens).toBe(250);
+    expect(output.usage.output_tokens).toBe(50);
+  });
+
+  it('handles empty summary response', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '   ' }],
+        usage: { input_tokens: 10, output_tokens: 1 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.summary).toBe('');
+    expect(output.actualWords).toBe(0);
+  });
+
+  it('handles combination of style and length parameters', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '- Point one\n- Point two\n- Point three' }],
+        usage: { input_tokens: 100, output_tokens: 30 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--style', 'bullets', '--length', '50'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.style).toBe('bullets');
+    expect(output.targetWords).toBe(50);
+  });
+
+  it('calculates actualWords correctly for single word', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Summary' }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.actualWords).toBe(1);
+  });
+
+  it('calculates actualWords correctly with multiple spaces', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Word1   Word2    Word3' }],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.actualWords).toBe(3);
+  });
+
+  it('handles file with unicode content', async () => {
+    const tempFile = join(tmpdir(), `test-summarize-unicode-${Date.now()}.txt`);
+    tempFiles.push(tempFile);
+    const content = '日本語のテキスト。これは要約のテストです。';
+    writeFileSync(tempFile, content);
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '日本語の要約' }],
+        usage: { input_tokens: 50, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript([tempFile, '--file'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.summary).toBe('日本語の要約');
+  });
+
+  it('handles file path with spaces', async () => {
+    const tempFile = join(tmpdir(), `test summarize with spaces ${Date.now()}.txt`);
+    tempFiles.push(tempFile);
+    writeFileSync(tempFile, 'Content to summarize');
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Summary' }],
+        usage: { input_tokens: 20, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript([tempFile, '--file'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles summary with newlines and special characters', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Line 1\nLine 2\nLine 3\t\tTabbed' }],
+        usage: { input_tokens: 100, output_tokens: 30 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.summary).toContain('\n');
+    // Split by whitespace: "Line", "1", "Line", "2", "Line", "3", "Tabbed" = 7 words
+    expect(output.actualWords).toBe(7);
+  });
+
+  it('handles zero-length target gracefully', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Minimal' }],
+        usage: { input_tokens: 50, output_tokens: 5 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--length', '0'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.targetWords).toBe(0);
+  });
+
+  it('handles API response with missing content array', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+  });
+
+  it('correctly tracks originalLength for multi-line text', async () => {
+    const multiLineText = 'Line 1\nLine 2\nLine 3';
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Summary' }],
+        usage: { input_tokens: 20, output_tokens: 5 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript([multiLineText], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.originalLength).toBe(multiLineText.length);
+  });
+
+  it('handles concurrent summarization requests', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Summary text' }],
+        usage: { input_tokens: 50, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const promise1 = runScript(['text one'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+    const promise2 = runScript(['text two'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    const [result1, result2] = await Promise.all([promise1, promise2]);
+
+    expect(result1.code).toBe(0);
+    expect(result2.code).toBe(0);
+  });
+
+  it('handles text with code blocks', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Code summary' }],
+        usage: { input_tokens: 100, output_tokens: 30 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['function test() { return true; }'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles text with markdown formatting', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '**Bold summary**' }],
+        usage: { input_tokens: 80, output_tokens: 25 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['# Title\n\n**Bold** and *italic* text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles invalid length parameter gracefully', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Summary' }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--length', 'not-a-number'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    // parseInt('not-a-number') returns NaN, which JSON.stringify converts to null
+    expect(output.targetWords).toBe(null);
+  });
 });

@@ -265,4 +265,240 @@ describe('embeddings.js', () => {
 
     expect(result.code).toBe(0);
   });
+
+  it('handles very large embeddings correctly', async () => {
+    const largeEmbedding = Array(3072).fill(0.123);
+    const mockResponse = {
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: largeEmbedding }],
+        usage: { total_tokens: 10 },
+      }),
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await runScript(['test text', '--dimensions', '3072'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.dimensions).toBe(3072);
+    expect(output.embedding[0]).toBe(0.123);
+  });
+
+  it('handles special characters in text input', async () => {
+    const mockResponse = {
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: [0.1, 0.2] }],
+        usage: { total_tokens: 5 },
+      }),
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await runScript(['Text with "quotes" and \'apostrophes\' & symbols!'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles rate limit errors', async () => {
+    const mockResponse = {
+      ok: false,
+      status: 429,
+      text: async () => 'Rate limit exceeded',
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await runScript(['test text'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+    const error = JSON.parse(result.stderr);
+    expect(error.error).toContain('429');
+  });
+
+  it('handles invalid dimensions parameter gracefully', async () => {
+    const mockResponse = {
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: [0.1] }],
+        usage: { total_tokens: 5 },
+      }),
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await runScript(['test text', '--dimensions', 'invalid'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    // parseInt('invalid') returns NaN, which becomes null when stringified to JSON
+    expect(output.dimensions).toBe(null);
+  });
+
+  it('handles network timeout errors', async () => {
+    mockFetch.mockImplementation(() =>
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('ETIMEDOUT')), 100)
+      )
+    );
+
+    const result = await runScript(['test text'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('ETIMEDOUT');
+  });
+
+  it('handles malformed JSON response', async () => {
+    const mockResponse = {
+      ok: true,
+      json: async () => {
+        throw new Error('Unexpected token in JSON');
+      },
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await runScript(['test text'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+  });
+
+  it('saves embeddings to file with --output flag', async () => {
+    const fs = require('fs');
+    const path = require('path');
+    const tempFile = path.join('/tmp', `test-embeddings-${Date.now()}.json`);
+
+    const mockResponse = {
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        usage: { total_tokens: 5 },
+      }),
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    try {
+      const result = await runScript(['test text', '--output', tempFile], {
+        OPENAI_API_KEY: 'test-key',
+      });
+
+      expect(result.code).toBe(0);
+      const output = JSON.parse(result.stdout);
+      expect(output).toHaveProperty('success', true);
+      expect(output).toHaveProperty('saved', tempFile);
+      expect(output).toHaveProperty('dimensions');
+      expect(output).toHaveProperty('usage');
+
+      // Verify file was created
+      expect(fs.existsSync(tempFile)).toBe(true);
+      const savedData = JSON.parse(fs.readFileSync(tempFile, 'utf-8'));
+      expect(savedData).toHaveProperty('embedding');
+      expect(savedData.embedding).toEqual([0.1, 0.2, 0.3]);
+    } finally {
+      // Cleanup
+      if (fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+    }
+  });
+
+  it('handles mixed API key configurations', async () => {
+    const mockResponse = {
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: [0.5] }],
+        usage: { total_tokens: 3 },
+      }),
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    // Test with both keys set - should prefer OPENAI_API_KEY
+    const result = await runScript(['test'], {
+      OPENAI_API_KEY: 'primary-key',
+      AI_GATEWAY_API_KEY: 'fallback-key',
+    });
+
+    expect(result.code).toBe(0);
+    expect(mockFetch).toHaveBeenCalled();
+    const callArgs = mockFetch.mock.calls[0][1];
+    expect(callArgs.headers.Authorization).toContain('primary-key');
+  });
+
+  it('handles zero-dimension embeddings gracefully', async () => {
+    const mockResponse = {
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: [] }],
+        usage: { total_tokens: 1 },
+      }),
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await runScript(['test text', '--dimensions', '0'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    // Empty embedding still gets formatted with ... and total count
+    expect(output.embedding).toHaveLength(2);
+    expect(output.embedding[0]).toBe('...');
+  });
+
+  it('handles API response with missing data array', async () => {
+    const mockResponse = {
+      ok: true,
+      json: async () => ({
+        usage: { total_tokens: 5 },
+      }),
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await runScript(['test text'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+  });
+
+  it('preserves exact embedding values without rounding', async () => {
+    const preciseEmbedding = [0.123456789, -0.987654321, 0.000000001];
+    const mockResponse = {
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: preciseEmbedding }],
+        usage: { total_tokens: 5 },
+      }),
+    };
+
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await runScript(['test'], {
+      OPENAI_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.embedding[0]).toBe(0.123456789);
+    expect(output.embedding[1]).toBe(-0.987654321);
+    expect(output.embedding[2]).toBe(0.000000001);
+  });
 });

@@ -289,4 +289,431 @@ describe('extract.js', () => {
     expect(output.extracted.person.name).toBe('Alice');
     expect(output.extracted.person.address.city).toBe('Boston');
   });
+
+  it('handles extraction with array schemas', async () => {
+    const arraySchema = {
+      items: ['string'],
+      count: 'number',
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [
+          {
+            text: JSON.stringify({
+              items: ['apple', 'banana', 'cherry'],
+              count: 3,
+            }),
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 25 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['I bought apple, banana, and cherry', '--schema', JSON.stringify(arraySchema)],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.items).toEqual(['apple', 'banana', 'cherry']);
+    expect(output.extracted.count).toBe(3);
+  });
+
+  it('handles multi-word text arguments', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{"result": "success"}' }],
+        usage: { input_tokens: 20, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['This', 'is', 'multiple', 'words', '--schema', '{"result":"string"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles network timeout errors', async () => {
+    const mockFetch = vi.fn().mockImplementation(() =>
+      Promise.reject(new Error('Network timeout'))
+    );
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['text', '--schema', '{"field":"string"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(1);
+  });
+
+  it('handles rate limit errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => 'Rate limit exceeded',
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['text', '--schema', '{"field":"string"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(1);
+    const error = JSON.parse(result.stderr);
+    expect(error.error).toContain('429');
+  });
+
+  it('handles empty text with schema', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{}' }],
+        usage: { input_tokens: 5, output_tokens: 5 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['', '--schema', '{"field":"string"}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+  });
+
+  it('validates usage tracking', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{"name": "test"}' }],
+        usage: { input_tokens: 150, output_tokens: 75 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['long text', '--schema', '{"name":"string"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.usage.input_tokens).toBe(150);
+    expect(output.usage.output_tokens).toBe(75);
+  });
+
+  it('handles special characters in schema', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{"field-name": "value"}' }],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['text', '--schema', '{"field-name":"string"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted['field-name']).toBe('value');
+  });
+
+  it('extracts JSON from markdown code blocks without language marker', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '```\n{"name": "NoLang", "value": 99}\n```' }],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['text', '--schema', '{"name":"string","value":"number"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.name).toBe('NoLang');
+    expect(output.extracted.value).toBe(99);
+  });
+
+  it('handles extraction when response has extra whitespace', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '\n\n  {"data": "trimmed"}  \n\n' }],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--schema', '{"data":"string"}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.data).toBe('trimmed');
+  });
+
+  it('handles extraction with boolean and null values', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [
+          {
+            text: JSON.stringify({
+              active: true,
+              deleted: false,
+              metadata: null,
+            }),
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['text', '--schema', '{"active":"boolean","deleted":"boolean","metadata":"null"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.active).toBe(true);
+    expect(output.extracted.deleted).toBe(false);
+    expect(output.extracted.metadata).toBe(null);
+  });
+
+  it('handles API response with missing content array', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--schema', '{"field":"string"}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+  });
+
+  it('handles very large extracted objects', async () => {
+    const largeObject = {
+      items: Array(100)
+        .fill(null)
+        .map((_, i) => ({ id: i, name: `Item ${i}` })),
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(largeObject) }],
+        usage: { input_tokens: 500, output_tokens: 800 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['text with many items', '--schema', '{"items":"array"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.items).toHaveLength(100);
+    expect(output.usage.output_tokens).toBe(800);
+  });
+
+  it('handles schema with unicode characters', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{"名前": "太郎", "年齢": 25}' }],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['日本語のテキスト', '--schema', '{"名前":"string","年齢":"number"}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted['名前']).toBe('太郎');
+    expect(output.extracted['年齢']).toBe(25);
+  });
+
+  it('handles extraction with empty schema', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{}' }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--schema', '{}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted).toEqual({});
+  });
+
+  it('handles response with multiple JSON code blocks', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '```json\n{"first": "block"}\n```\nSome text\n```json\n{"second": "block"}\n```' }],
+        usage: { input_tokens: 20, output_tokens: 30 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--schema', '{"field":"string"}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    // Should extract the first JSON block
+    expect(output.extracted).toHaveProperty('first');
+  });
+
+  it('handles extraction with circular reference simulation', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{"data": {"nested": {"value": "test"}}}' }],
+        usage: { input_tokens: 15, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['text', '--schema', '{"data":{"nested":{"value":"string"}}}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.data.nested.value).toBe('test');
+  });
+
+  it('handles extraction with very long schema', async () => {
+    const longSchema = JSON.stringify({
+      fields: Array(50)
+        .fill(null)
+        .map((_, i) => ({ [`field${i}`]: 'string' }))
+        .reduce((acc, val) => ({ ...acc, ...val }), {}),
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{"fields": {}}' }],
+        usage: { input_tokens: 200, output_tokens: 50 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--schema', longSchema], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles concurrent extraction requests', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{"result": "success"}' }],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const promise1 = runScript(['text one', '--schema', '{"result":"string"}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+    const promise2 = runScript(['text two', '--schema', '{"result":"string"}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    const [result1, result2] = await Promise.all([promise1, promise2]);
+
+    expect(result1.code).toBe(0);
+    expect(result2.code).toBe(0);
+  });
+
+  it('handles extraction with very nested schema', async () => {
+    const deepSchema = {
+      level1: {
+        level2: {
+          level3: {
+            level4: {
+              level5: 'string',
+            },
+          },
+        },
+      },
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [
+          {
+            text: JSON.stringify({
+              level1: {
+                level2: {
+                  level3: {
+                    level4: {
+                      level5: 'deep value',
+                    },
+                  },
+                },
+              },
+            }),
+          },
+        ],
+        usage: { input_tokens: 30, output_tokens: 40 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['nested data', '--schema', JSON.stringify(deepSchema)],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.level1.level2.level3.level4.level5).toBe('deep value');
+  });
 });

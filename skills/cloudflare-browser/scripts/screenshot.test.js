@@ -222,4 +222,205 @@ describe('screenshot.js', () => {
 
     expect(result.stderr).not.toContain('Usage');
   });
+
+  it('handles URLs with fragments', async () => {
+    const result = await runScript(['https://example.com/page#section'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles localhost URLs', async () => {
+    const result = await runScript(['http://localhost:3000'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles IP address URLs', async () => {
+    const result = await runScript(['http://192.168.1.1'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles file extensions in output filename', async () => {
+    const result = await runScript(['https://example.com', 'my-screenshot.png'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles output filename without extension', async () => {
+    const result = await runScript(['https://example.com', 'screenshot'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles subdomain URLs', async () => {
+    const result = await runScript(['https://sub.domain.example.com'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with ports', async () => {
+    const result = await runScript(['https://example.com:8080'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with encoded characters', async () => {
+    const result = await runScript(['https://example.com/path%20with%20spaces'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles output path with directory that needs creation', async () => {
+    const result = await runScript(['https://example.com', 'output/nested/screenshot.png'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles absolute output paths', async () => {
+    const result = await runScript(['https://example.com', '/tmp/absolute-screenshot.png'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with query parameters', async () => {
+    const result = await runScript(['https://example.com?param=value&other=test'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with hash fragments', async () => {
+    const result = await runScript(['https://example.com#section'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles IP addresses as URLs', async () => {
+    const result = await runScript(['https://192.168.1.1'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles localhost URLs', async () => {
+    const result = await runScript(['http://localhost:3000'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles file:// protocol URLs', async () => {
+    const result = await runScript(['file:///path/to/file.html'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('shows error when CDP_SECRET is empty string', async () => {
+    const result = await runScript(['https://example.com'], {
+      CDP_SECRET: '',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('CDP_SECRET');
+  });
+
+  it('handles WORKER_URL with trailing slash', async () => {
+    const result = await runScript(['https://example.com'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test/',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles very complex query strings in URLs', async () => {
+    const complexQuery = 'https://example.com/?' + Array(50)
+      .fill(0)
+      .map((_, i) => `param${i}=value${i}`)
+      .join('&');
+
+    const result = await runScript([complexQuery], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles multiple consecutive URL arguments (uses first)', async () => {
+    const result = await runScript(
+      ['https://first.com', 'output.png', 'https://second.com'],
+      {
+        CDP_SECRET: 'test-secret',
+        WORKER_URL: 'wss://invalid.test',
+      }
+    );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles output path that needs directory creation', async () => {
+    const result = await runScript(
+      ['https://example.com', 'new/nested/dir/screenshot.png'],
+      {
+        CDP_SECRET: 'test-secret',
+        WORKER_URL: 'wss://invalid.test',
+      }
+    );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles WORKER_URL with multiple protocol prefixes', async () => {
+    const result = await runScript(['https://example.com'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'https://https://test-worker.com',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
 });
