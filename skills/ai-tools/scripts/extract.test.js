@@ -564,4 +564,156 @@ describe('extract.js', () => {
     expect(output.extracted['名前']).toBe('太郎');
     expect(output.extracted['年齢']).toBe(25);
   });
+
+  it('handles extraction with empty schema', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{}' }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--schema', '{}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted).toEqual({});
+  });
+
+  it('handles response with multiple JSON code blocks', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '```json\n{"first": "block"}\n```\nSome text\n```json\n{"second": "block"}\n```' }],
+        usage: { input_tokens: 20, output_tokens: 30 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--schema', '{"field":"string"}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    // Should extract the first JSON block
+    expect(output.extracted).toHaveProperty('first');
+  });
+
+  it('handles extraction with circular reference simulation', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{"data": {"nested": {"value": "test"}}}' }],
+        usage: { input_tokens: 15, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['text', '--schema', '{"data":{"nested":{"value":"string"}}}'],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.data.nested.value).toBe('test');
+  });
+
+  it('handles extraction with very long schema', async () => {
+    const longSchema = JSON.stringify({
+      fields: Array(50)
+        .fill(null)
+        .map((_, i) => ({ [`field${i}`]: 'string' }))
+        .reduce((acc, val) => ({ ...acc, ...val }), {}),
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{"fields": {}}' }],
+        usage: { input_tokens: 200, output_tokens: 50 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--schema', longSchema], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles concurrent extraction requests', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '{"result": "success"}' }],
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const promise1 = runScript(['text one', '--schema', '{"result":"string"}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+    const promise2 = runScript(['text two', '--schema', '{"result":"string"}'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    const [result1, result2] = await Promise.all([promise1, promise2]);
+
+    expect(result1.code).toBe(0);
+    expect(result2.code).toBe(0);
+  });
+
+  it('handles extraction with very nested schema', async () => {
+    const deepSchema = {
+      level1: {
+        level2: {
+          level3: {
+            level4: {
+              level5: 'string',
+            },
+          },
+        },
+      },
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [
+          {
+            text: JSON.stringify({
+              level1: {
+                level2: {
+                  level3: {
+                    level4: {
+                      level5: 'deep value',
+                    },
+                  },
+                },
+              },
+            }),
+          },
+        ],
+        usage: { input_tokens: 30, output_tokens: 40 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(
+      ['nested data', '--schema', JSON.stringify(deepSchema)],
+      { ANTHROPIC_API_KEY: 'test-key' }
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.extracted.level1.level2.level3.level4.level5).toBe('deep value');
+  });
 });

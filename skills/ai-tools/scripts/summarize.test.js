@@ -689,4 +689,81 @@ describe('summarize.js', () => {
     const output = JSON.parse(result.stdout);
     expect(output.originalLength).toBe(multiLineText.length);
   });
+
+  it('handles concurrent summarization requests', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Summary text' }],
+        usage: { input_tokens: 50, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const promise1 = runScript(['text one'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+    const promise2 = runScript(['text two'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    const [result1, result2] = await Promise.all([promise1, promise2]);
+
+    expect(result1.code).toBe(0);
+    expect(result2.code).toBe(0);
+  });
+
+  it('handles text with code blocks', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Code summary' }],
+        usage: { input_tokens: 100, output_tokens: 30 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['function test() { return true; }'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles text with markdown formatting', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: '**Bold summary**' }],
+        usage: { input_tokens: 80, output_tokens: 25 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['# Title\n\n**Bold** and *italic* text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles invalid length parameter gracefully', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: 'Summary' }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['text', '--length', 'not-a-number'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    // parseInt('not-a-number') returns NaN, which JSON.stringify converts to null
+    expect(output.targetWords).toBe(null);
+  });
 });

@@ -508,4 +508,63 @@ describe('video.js', () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain('CDP_SECRET');
   });
+
+  it('handles very long comma-separated URL list', async () => {
+    const urls = Array(100)
+      .fill(0)
+      .map((_, i) => `https://site${i}.com`)
+      .join(',');
+
+    const result = await runScript([urls], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles both --scroll and --fps in different order', async () => {
+    const result = await runScript(
+      ['https://example.com', '--scroll', '--fps', '20'],
+      {
+        CDP_SECRET: 'test-secret',
+        WORKER_URL: 'wss://invalid.test',
+      }
+    );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles complex URLs with auth, port, and query', async () => {
+    const result = await runScript(
+      ['https://user:pass@example.com:8443/path?query=value#hash'],
+      {
+        CDP_SECRET: 'test-secret',
+        WORKER_URL: 'wss://invalid.test',
+      }
+    );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles output filename with multiple extensions', async () => {
+    const result = await runScript(['https://example.com', 'video.backup.mp4'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles URLs with authentication credentials in multiple URLs', async () => {
+    const result = await runScript(
+      ['https://user:pass@example.com,https://user2:pass2@test.com'],
+      {
+        CDP_SECRET: 'test-secret',
+        WORKER_URL: 'wss://invalid.test',
+      }
+    );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
 });

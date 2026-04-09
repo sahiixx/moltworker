@@ -376,4 +376,51 @@ describe('screenshot.js', () => {
 
     expect(result.stderr).not.toContain('Usage');
   });
+
+  it('handles very complex query strings in URLs', async () => {
+    const complexQuery = 'https://example.com/?' + Array(50)
+      .fill(0)
+      .map((_, i) => `param${i}=value${i}`)
+      .join('&');
+
+    const result = await runScript([complexQuery], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'wss://invalid.test',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles multiple consecutive URL arguments (uses first)', async () => {
+    const result = await runScript(
+      ['https://first.com', 'output.png', 'https://second.com'],
+      {
+        CDP_SECRET: 'test-secret',
+        WORKER_URL: 'wss://invalid.test',
+      }
+    );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles output path that needs directory creation', async () => {
+    const result = await runScript(
+      ['https://example.com', 'new/nested/dir/screenshot.png'],
+      {
+        CDP_SECRET: 'test-secret',
+        WORKER_URL: 'wss://invalid.test',
+      }
+    );
+
+    expect(result.stderr).not.toContain('Usage');
+  });
+
+  it('handles WORKER_URL with multiple protocol prefixes', async () => {
+    const result = await runScript(['https://example.com'], {
+      CDP_SECRET: 'test-secret',
+      WORKER_URL: 'https://https://test-worker.com',
+    });
+
+    expect(result.stderr).not.toContain('Usage');
+  });
 });

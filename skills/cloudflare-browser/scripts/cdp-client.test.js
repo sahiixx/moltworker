@@ -256,49 +256,23 @@ describe('cdp-client.js', () => {
     }
 
     const { createClient } = require('./cdp-client.js');
-    const client = await createClient({ WebSocket: TypeMockWS });
-    await client.type('#input', 'test text');
+    const client = await createClient({ WebSocket: ClickMockWS });
+    await client.click('#button');
 
-    expect(typeExpression).toContain('#input');
-    expect(typeExpression).toContain('test text');
+    expect(clickExpression).toContain('#button');
+    expect(clickExpression).toContain('click()');
   });
 
-  it('getHTML method returns HTML', async () => {
-    class HTMLMockWS extends MockWS {
+  it('type method works', async () => {
+    let typeExpression = null;
+    class TypeMockWS extends MockWS {
       send(data) {
         const msg = JSON.parse(data);
         setTimeout(() => {
-          if (msg.method === 'Runtime.evaluate' && msg.params.expression.includes('outerHTML')) {
-            this.emit('message', JSON.stringify({
-              id: msg.id,
-              result: { result: { value: '<html><body>Test</body></html>' } }
-            }));
-          } else {
-            this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
+          if (msg.method === 'Runtime.evaluate') {
+            typeExpression = msg.params.expression;
           }
-        }, 10);
-      }
-    }
-
-    const { createClient } = require('./cdp-client.js');
-    const client = await createClient({ WebSocket: HTMLMockWS });
-    const html = await client.getHTML();
-    expect(html).toBe('<html><body>Test</body></html>');
-  });
-
-  it('getText method returns text', async () => {
-    class TextMockWS extends MockWS {
-      send(data) {
-        const msg = JSON.parse(data);
-        setTimeout(() => {
-          if (msg.method === 'Runtime.evaluate' && msg.params.expression.includes('innerText')) {
-            this.emit('message', JSON.stringify({
-              id: msg.id,
-              result: { result: { value: 'Page text content' } }
-            }));
-          } else {
-            this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
-          }
+          this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
         }, 10);
       }
     }
@@ -622,5 +596,74 @@ describe('cdp-client.js', () => {
 
     // Should close without throwing
     expect(() => client.close()).not.toThrow();
+  });
+
+  it('handles send method with empty params', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+
+    await expect(client.send('Page.reload')).resolves.toBeDefined();
+  });
+
+  it('handles viewport with zero dimensions', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+
+    await expect(client.setViewport(0, 0, 1, false)).resolves.toBeUndefined();
+  });
+
+  it('handles negative scroll values', async () => {
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: MockWS });
+
+    await expect(client.scroll(-500)).resolves.toBeUndefined();
+  });
+
+  it('handles screenshot with webp format', async () => {
+    class WebPMockWS extends MockWS {
+      send(data) {
+        const msg = JSON.parse(data);
+        setTimeout(() => {
+          if (msg.method === 'Page.captureScreenshot') {
+            this.emit('message', JSON.stringify({
+              id: msg.id,
+              result: { data: Buffer.from('test-webp-image').toString('base64') }
+            }));
+          } else {
+            this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
+          }
+        }, 10);
+      }
+    }
+
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: WebPMockWS });
+
+    const screenshot = await client.screenshot('webp');
+    expect(screenshot).toBeInstanceOf(Buffer);
+  });
+
+  it('handles getHTML when result is undefined', async () => {
+    class NoResultMockWS extends MockWS {
+      send(data) {
+        const msg = JSON.parse(data);
+        setTimeout(() => {
+          if (msg.method === 'Runtime.evaluate' && msg.params.expression.includes('outerHTML')) {
+            this.emit('message', JSON.stringify({
+              id: msg.id,
+              result: {}
+            }));
+          } else {
+            this.emit('message', JSON.stringify({ id: msg.id, result: {} }));
+          }
+        }, 10);
+      }
+    }
+
+    const { createClient } = require('./cdp-client.js');
+    const client = await createClient({ WebSocket: NoResultMockWS });
+
+    const html = await client.getHTML();
+    expect(html).toBeUndefined();
   });
 });

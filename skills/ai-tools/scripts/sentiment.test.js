@@ -699,4 +699,164 @@ describe('sentiment.js', () => {
 
     expect(result.code).toBe(0);
   });
+
+  it('handles text with emojis', async () => {
+    const mockAnalysis = {
+      sentiment: 'positive',
+      score: 0.9,
+      confidence: 0.95,
+      emotions: [{ emotion: 'joy', intensity: 0.9 }],
+      tone: 'cheerful',
+      keywords: ['😊', '🎉', '❤️'],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['I love this! 😊🎉❤️'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.analysis.sentiment).toBe('positive');
+  });
+
+  it('handles ironic positive text', async () => {
+    const mockAnalysis = {
+      sentiment: 'negative',
+      score: -0.5,
+      confidence: 0.6,
+      emotions: [{ emotion: 'frustration', intensity: 0.7 }],
+      tone: 'ironic',
+      keywords: ['perfect', 'love'],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 15, output_tokens: 25 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['Perfect! Just what I needed - more bugs!'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.analysis.sentiment).toBe('negative');
+    expect(output.analysis.tone).toBe('ironic');
+  });
+
+  it('handles concurrent sentiment analysis requests', async () => {
+    const mockAnalysis = {
+      sentiment: 'neutral',
+      score: 0,
+      confidence: 0.8,
+      emotions: [],
+      tone: 'informative',
+      keywords: [],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const promise1 = runScript(['text one'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+    const promise2 = runScript(['text two'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    const [result1, result2] = await Promise.all([promise1, promise2]);
+
+    expect(result1.code).toBe(0);
+    expect(result2.code).toBe(0);
+  });
+
+  it('handles text with mixed languages', async () => {
+    const mockAnalysis = {
+      sentiment: 'positive',
+      score: 0.6,
+      confidence: 0.75,
+      emotions: [{ emotion: 'joy', intensity: 0.6 }],
+      tone: 'cheerful',
+      keywords: ['good', 'bien', 'gut'],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 15, output_tokens: 25 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['This is good, c\'est bien, das ist gut'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.analysis.sentiment).toBe('positive');
+  });
+
+  it('handles text with only punctuation', async () => {
+    const mockAnalysis = {
+      sentiment: 'neutral',
+      score: 0,
+      confidence: 0.1,
+      emotions: [],
+      tone: 'ambiguous',
+      keywords: [],
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify(mockAnalysis) }],
+        usage: { input_tokens: 5, output_tokens: 10 },
+      }),
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['!?!?!...!!!'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(0);
+  });
+
+  it('handles API returning 503 service unavailable', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => 'Service temporarily unavailable',
+    });
+    global.fetch = mockFetch;
+
+    const result = await runScript(['some text'], {
+      ANTHROPIC_API_KEY: 'test-key',
+    });
+
+    expect(result.code).toBe(1);
+    const error = JSON.parse(result.stderr);
+    expect(error.error).toContain('503');
+  });
 });
