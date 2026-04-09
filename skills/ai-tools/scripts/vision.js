@@ -75,7 +75,7 @@ async function analyzeImage(imagePath, prompt, model, detail) {
   let mediaType = 'image/png';
   let base64Data = '';
 
-  if (imagePath.startsWith('http')) {
+  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
     const response = await fetch(imagePath);
     const buffer = await response.arrayBuffer();
     base64Data = Buffer.from(buffer).toString('base64');
