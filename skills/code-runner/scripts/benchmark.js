@@ -272,7 +272,7 @@ async function main() {
       warmupRuns: options.warmup,
       results: stats,
       unit: 'ms',
-      totalTime: Math.round(times.reduce((a, b) => a + b, 0) * 100) / 100
+      totalTime: times.reduce((a, b) => a + b, 0)
     }, null, 2));
 
   } catch (err) {

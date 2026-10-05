@@ -151,5 +151,5 @@ export { createClient };
 
 // CLI mode
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  console.log('CDP Client Library - import with: const { createClient } = require("./cdp-client")');
+  console.log('CDP Client Library - import with: import { createClient } from "./cdp-client.js"');
 }
