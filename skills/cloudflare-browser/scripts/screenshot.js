@@ -4,9 +4,9 @@
  * Usage: node screenshot.js <url> [output.png]
  */
 
-const WebSocket = require('ws');
-const fs = require('fs');
-const path = require('path');
+import { WebSocket } from 'ws';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const CDP_SECRET = process.env.CDP_SECRET;
 if (!CDP_SECRET) {

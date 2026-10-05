@@ -14,7 +14,7 @@ describe('extract.js', () => {
   });
 
   const runScript = async (args, env = {}) => {
-    const { main } = require('./extract.js');
+    const { main } = await import('./extract.js');
     const originalArgv = process.argv;
     const originalEnv = { ...process.env };
     process.argv = ['node', 'extract.js', ...args];

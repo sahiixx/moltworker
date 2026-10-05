@@ -5,9 +5,9 @@
  * Usage: node hash.js <data> [OPTIONS]
  */
 
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const args = process.argv.slice(2);
 
@@ -112,7 +112,7 @@ function main() {
       algorithm: options.algorithm,
       encoding: options.encoding,
       hash: output,
-      inputLength: typeof data === 'string' ? data.length : data.length
+      inputLength: typeof data === 'string' ? Buffer.byteLength(data) : data.length
     };
 
     if (options.isFile) {

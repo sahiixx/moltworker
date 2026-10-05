@@ -5,10 +5,10 @@
  * Usage: node benchmark.js <code> --lang <language>
  */
 
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 const args = process.argv.slice(2);
 
@@ -88,6 +88,8 @@ function wrapCodeForBenchmark(code, lang, iterations) {
     return `
 const iterations = ${iterations};
 const times = [];
+const printResults = console.log;
+console.log = () => {}; // Keep snippet output out of the timing JSON protocol.
 
 for (let i = 0; i < iterations; i++) {
   const start = process.hrtime.bigint();
@@ -96,7 +98,7 @@ for (let i = 0; i < iterations; i++) {
   times.push(Number(end - start) / 1e6);
 }
 
-console.log(JSON.stringify(times));
+printResults(JSON.stringify(times));
 `;
   }
 

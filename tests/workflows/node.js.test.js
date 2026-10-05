@@ -86,22 +86,22 @@ describe('Node.js CI Workflow', () => {
       expect(workflow.jobs.build.strategy.matrix).toBeDefined();
     });
 
-    it('should test against Node.js versions 18.x, 20.x, and 22.x', () => {
+    it('should test against Node.js versions 20.x and 22.x', () => {
       const nodeVersions = workflow.jobs.build.strategy.matrix['node-version'];
       expect(nodeVersions).toBeDefined();
       expect(Array.isArray(nodeVersions)).toBe(true);
-      expect(nodeVersions).toHaveLength(3);
-      expect(nodeVersions).toContain('18.x');
+      expect(nodeVersions).toEqual(['20.x', '22.x']);
+      expect(nodeVersions).not.toContain('18.x');
       expect(nodeVersions).toContain('20.x');
       expect(nodeVersions).toContain('22.x');
     });
 
     it('should include only currently supported Node.js LTS versions', () => {
       const nodeVersions = workflow.jobs.build.strategy.matrix['node-version'];
-      // All versions should be >= 18 (Node 18 is the oldest LTS as of 2024)
+      // Cloudflare's Vite plugin requires the File global from Node 20+.
       nodeVersions.forEach(version => {
         const majorVersion = parseInt(version.split('.')[0]);
-        expect(majorVersion).toBeGreaterThanOrEqual(18);
+        expect(majorVersion).toBeGreaterThanOrEqual(20);
       });
     });
 
@@ -384,7 +384,7 @@ describe('Node.js CI Workflow', () => {
     it('should include previous LTS for backward compatibility', () => {
       const nodeVersions = workflow.jobs.build.strategy.matrix['node-version'];
       // Should include at least one version older than latest LTS
-      expect(nodeVersions.some(v => v.startsWith('18'))).toBe(true);
+      expect(nodeVersions).toContain('20.x');
     });
   });
 
@@ -476,10 +476,10 @@ describe('Node.js CI Workflow', () => {
       expect(workflow.on.pull_request.branches).toContain('main');
     });
 
-    it('should maintain all three Node.js versions', () => {
+    it('should maintain both supported Node.js versions', () => {
       // Regression test: ensure we don't drop any Node version
       const nodeVersions = workflow.jobs.build.strategy.matrix['node-version'];
-      expect(nodeVersions).toHaveLength(3);
+      expect(nodeVersions).toEqual(['20.x', '22.x']);
     });
 
     it('should maintain npm ci command', () => {

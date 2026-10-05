@@ -5,7 +5,8 @@
  * Usage: node sentiment.js <text>
  */
 
-const args = process.argv.slice(2);
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Parse command-line arguments into an input text string and a model name.
@@ -15,6 +16,7 @@ const args = process.argv.slice(2);
  *  - `model`: the model name (defaults to "claude-3-5-haiku-20241022" if not specified via `--model`).
  */
 function parseArgs() {
+  const args = process.argv.slice(2);
   const result = {
     text: '',
     model: 'claude-3-5-haiku-20241022'
@@ -113,7 +115,7 @@ async function analyzeSentiment(text, model) {
  *
  * Prints usage and exits with code 1 when no text is provided. On success prints the analysis as formatted JSON to stdout; on failure prints an error object to stderr and exits with code 1.
  */
-async function main() {
+export async function main() {
   const options = parseArgs();
 
   if (!options.text) {
@@ -133,4 +135,6 @@ async function main() {
   }
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

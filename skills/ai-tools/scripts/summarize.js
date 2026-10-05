@@ -5,10 +5,9 @@
  * Usage: node summarize.js <text|file> [OPTIONS]
  */
 
-const fs = require('fs');
-const path = require('path');
-
-const args = process.argv.slice(2);
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Parse command-line arguments into an options object for the summarizer.
@@ -25,6 +24,7 @@ const args = process.argv.slice(2);
  * - `model`: model name to use for summarization (default "claude-3-5-sonnet-20241022").
  */
 function parseArgs() {
+  const args = process.argv.slice(2);
   const result = {
     text: '',
     length: 100,
@@ -112,13 +112,13 @@ async function summarize(text, length, style, model) {
   }
 
   const data = await response.json();
-  const summary = data.content[0].text;
+  const summary = data.content[0].text.trim();
 
   return {
     summary,
     style,
     targetWords: length,
-    actualWords: summary.split(/\s+/).length,
+    actualWords: summary ? summary.split(/\s+/).length : 0,
     originalLength: text.length,
     model,
     usage: {
@@ -133,7 +133,7 @@ async function summarize(text, length, style, model) {
  *
  * Exits with code 1 after printing usage if no input is provided, or after printing an error object when summarization fails.
  */
-async function main() {
+export async function main() {
   const options = parseArgs();
 
   if (!options.text) {
@@ -166,4 +166,6 @@ async function main() {
   }
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

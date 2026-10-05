@@ -104,12 +104,12 @@ describe('GitHub Actions Workflow: node.js.yml', () => {
     it('should test multiple Node.js versions', () => {
       const nodeVersions = workflow.jobs.build.strategy.matrix['node-version'];
       expect(Array.isArray(nodeVersions)).toBe(true);
-      expect(nodeVersions.length).toBeGreaterThanOrEqual(3);
+      expect(nodeVersions).toEqual(['20.x', '22.x']);
     });
 
     it('should include supported LTS versions', () => {
       const nodeVersions = workflow.jobs.build.strategy.matrix['node-version'];
-      expect(nodeVersions).toContain('18.x');
+      expect(nodeVersions).not.toContain('18.x'); // Cloudflare requires Node 20+.
       expect(nodeVersions).toContain('20.x');
       expect(nodeVersions).toContain('22.x');
     });
@@ -355,7 +355,7 @@ describe('GitHub Actions Workflow: node.js.yml', () => {
   describe('Edge Cases and Boundary Tests', () => {
     it('should handle matrix configuration properly (boundary test)', () => {
       const nodeVersions = workflow.jobs.build.strategy.matrix['node-version'];
-      expect(nodeVersions.length).toBeGreaterThanOrEqual(3);
+      expect(nodeVersions).toEqual(['20.x', '22.x']);
 
       // Verify all versions are valid
       nodeVersions.forEach(version => {

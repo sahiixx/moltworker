@@ -5,9 +5,9 @@
  * Usage: node decrypt.js <encrypted_json> --password <password>
  */
 
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const args = process.argv.slice(2);
 

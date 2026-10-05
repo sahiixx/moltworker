@@ -79,13 +79,13 @@ async function summarize(text, length, style, model) {
   }
 
   const data = await response.json();
-  const summary = data.content[0].text;
+  const summary = data.content[0].text.trim();
 
   return {
     summary,
     style,
     targetWords: length,
-    actualWords: summary.split(/\s+/).length,
+    actualWords: summary ? summary.split(/\s+/).length : 0,
     originalLength: text.length,
     model,
     usage: {

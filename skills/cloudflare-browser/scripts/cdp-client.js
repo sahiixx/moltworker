@@ -13,7 +13,9 @@
  *   client.close();
  */
 
-const WebSocket = require('ws');
+import { WebSocket } from 'ws';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 function createClient(options = {}) {
   const CDP_SECRET = options.secret || process.env.CDP_SECRET;
@@ -26,7 +28,8 @@ function createClient(options = {}) {
   const timeout = options.timeout || 60000;
   
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(wsUrl);
+    const WebSocketImpl = options.WebSocket || WebSocket;
+    const ws = new WebSocketImpl(wsUrl);
     let messageId = 1;
     const pending = new Map();
     let targetId = null;
@@ -144,9 +147,9 @@ function createClient(options = {}) {
   });
 }
 
-module.exports = { createClient };
+export { createClient };
 
 // CLI mode
-if (require.main === module) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   console.log('CDP Client Library - import with: const { createClient } = require("./cdp-client")');
 }

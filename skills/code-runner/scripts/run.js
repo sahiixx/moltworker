@@ -5,10 +5,10 @@
  * Usage: node run.js <code> --lang <language>
  */
 
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 const args = process.argv.slice(2);
 

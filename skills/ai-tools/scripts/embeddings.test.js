@@ -18,7 +18,7 @@ describe('embeddings.js', () => {
   });
 
   const runScript = async (args, env = {}) => {
-    const { main } = require('./embeddings.js');
+    const { main } = await import('./embeddings.js');
     const originalArgv = process.argv;
     const originalEnv = process.env;
     process.argv = ['node', 'embeddings.js', ...args];
