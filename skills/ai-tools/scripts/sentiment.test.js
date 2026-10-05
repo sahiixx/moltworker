@@ -14,7 +14,7 @@ describe('sentiment.js', () => {
   });
 
   const runScript = async (args, env = {}) => {
-    const { main } = require('./sentiment.js');
+    const { main } = await import('./sentiment.js');
     const originalArgv = process.argv;
     const originalEnv = { ...process.env };
     process.argv = ['node', 'sentiment.js', ...args];

@@ -28,7 +28,7 @@ describe('summarize.js', () => {
   });
 
   const runScript = async (args, env = {}) => {
-    const { main } = require('./summarize.js');
+    const { main } = await import('./summarize.js');
     const originalArgv = process.argv;
     const originalEnv = { ...process.env };
     process.argv = ['node', 'summarize.js', ...args];

@@ -31,7 +31,7 @@ describe('vision.js', () => {
   });
 
   const runScript = async (args, env = {}) => {
-    const { main } = require('./vision.js');
+    const { main } = await import('./vision.js');
     const originalArgv = process.argv;
     const originalEnv = { ...process.env };
     process.argv = ['node', 'vision.js', ...args];
@@ -449,25 +449,19 @@ describe('vision.js', () => {
     expect(result.code).toBe(0);
   });
 
-  it('handles network errors when fetching URL', async () => {
-    mockFetch.mockImplementation(async (url) => {
-      if (!url.startsWith('https://api.anthropic.com')) {
-        throw new Error('Failed to fetch image');
-      }
-      return {
-        ok: true,
-        json: async () => ({
-          content: [{ text: 'Analysis.' }],
-          usage: { input_tokens: 1500, output_tokens: 20 },
-        }),
-      };
-    });
+  it('handles network errors while analyzing an image URL', async () => {
+    mockFetch.mockRejectedValue(new Error('Failed to fetch image'));
 
     const result = await runScript(['https://example.com/bad-image.jpg'], {
       ANTHROPIC_API_KEY: 'test-key',
     });
 
     expect(result.code).toBe(1);
+    expect(result.stderr).toContain('Failed to fetch image');
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.messages[0].content[0].source).toEqual({
+      type: 'url', url: 'https://example.com/bad-image.jpg',
+    });
   });
 
   it('handles content-type header from URL fetch', async () => {
@@ -779,18 +773,11 @@ describe('vision.js', () => {
     expect(result.code).toBe(0);
   });
 
-  it('handles image URL fetch error', async () => {
-    mockFetch.mockImplementation(async (url) => {
-      if (url.startsWith('http://broken')) {
-        throw new Error('Failed to fetch image');
-      }
-      return {
-        ok: true,
-        json: async () => ({
-          content: [{ text: 'Analysis' }],
-          usage: { input_tokens: 1500, output_tokens: 20 },
-        }),
-      };
+  it('handles provider errors for an inaccessible image URL', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => 'Failed to fetch image',
     });
 
     const result = await runScript(['http://broken.com/image.png'], {
@@ -798,6 +785,7 @@ describe('vision.js', () => {
     });
 
     expect(result.code).toBe(1);
+    expect(result.stderr).toContain('API error: 400 - Failed to fetch image');
   });
 
   it('handles image analysis with custom detail parameter low', async () => {

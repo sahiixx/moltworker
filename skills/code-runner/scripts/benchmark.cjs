@@ -57,6 +57,8 @@ function wrapCodeForBenchmark(code, lang, iterations) {
     return `
 const iterations = ${iterations};
 const times = [];
+const printResults = console.log;
+console.log = () => {}; // Keep snippet output out of the timing JSON protocol.
 
 for (let i = 0; i < iterations; i++) {
   const start = process.hrtime.bigint();
@@ -65,7 +67,7 @@ for (let i = 0; i < iterations; i++) {
   times.push(Number(end - start) / 1e6);
 }
 
-console.log(JSON.stringify(times));
+printResults(JSON.stringify(times));
 `;
   }
 
@@ -206,7 +208,7 @@ async function main() {
       warmupRuns: options.warmup,
       results: stats,
       unit: 'ms',
-      totalTime: Math.round(times.reduce((a, b) => a + b, 0) * 100) / 100
+      totalTime: times.reduce((a, b) => a + b, 0)
     }, null, 2));
 
   } catch (err) {

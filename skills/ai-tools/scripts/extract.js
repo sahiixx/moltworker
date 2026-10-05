@@ -5,7 +5,8 @@
  * Usage: node extract.js <text> --schema <json_schema>
  */
 
-const args = process.argv.slice(2);
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Parse command-line arguments into an options object containing text, schema, and model.
@@ -21,6 +22,7 @@ const args = process.argv.slice(2);
  *  - `model`: the model name (defaults to `'claude-3-5-sonnet-20241022'`).
  */
 function parseArgs() {
+  const args = process.argv.slice(2);
   const result = {
     text: '',
     schema: null,
@@ -128,7 +130,7 @@ Return only the JSON object with extracted values. Use null for fields that cann
  *
  * If required arguments are missing or extraction fails, prints usage or an error object and exits the process with code 1.
  */
-async function main() {
+export async function main() {
   const options = parseArgs();
 
   if (!options.text || !options.schema) {
@@ -153,4 +155,6 @@ async function main() {
   }
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

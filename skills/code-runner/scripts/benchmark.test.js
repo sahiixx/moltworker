@@ -1,17 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { spawn } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-
-const scriptPath = path.join(process.cwd(), 'skills/code-runner/scripts/benchmark.js');
-
-describe('benchmark.js', () => {
-  function runScript(args) {
-    return new Promise((resolve) => {
-      const proc = spawn('node', [scriptPath, ...args], {
-        timeout: 10000
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'child_process';
+import fs from 'fs';
 import { writeFileSync, unlinkSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -51,7 +40,7 @@ describe('benchmark.js', () => {
       });
 
       proc.on('close', (exitCode) => {
-        resolve({ exitCode, stdout, stderr });
+        resolve({ exitCode, code: exitCode, stdout, stderr });
       });
     });
   }
@@ -213,15 +202,7 @@ describe('benchmark.js', () => {
       const output = JSON.parse(result.stdout);
       expect(output.results.min).toBeGreaterThanOrEqual(0);
     });
-      proc.on('close', (code) => {
-        resolve({ code, stdout, stderr });
-      });
-
-      proc.on('error', (err) => {
-        reject(err);
-      });
-    });
-  };
+  });
 
   it('shows usage when no code is provided', async () => {
     const result = await runScript([]);

@@ -5,10 +5,9 @@
  * Usage: node embeddings.js <text> [OPTIONS]
  */
 
-const fs = require('fs');
-const path = require('path');
-
-const args = process.argv.slice(2);
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Parse command-line arguments into an options object for embedding generation.
@@ -21,6 +20,7 @@ const args = process.argv.slice(2);
  *  - `output`: optional file path to save the result, or `null` if not set.
  */
 function parseArgs() {
+  const args = process.argv.slice(2);
   const result = {
     text: '',
     model: 'text-embedding-3-small',
@@ -96,7 +96,7 @@ async function generateEmbeddings(text, model, dimensions) {
  *
  * Parses argv for text, model, dimensions, and output options; if no text is provided prints usage and exits with code 1. Calls generateEmbeddings with the parsed options, and on success either writes the complete result as pretty JSON to the specified output file or prints a truncated embedding preview (first five values plus an indicator of total length). On failure logs a JSON error and exits with code 1.
  */
-async function main() {
+export async function main() {
   const options = parseArgs();
 
   if (!options.text) {
@@ -134,4 +134,6 @@ async function main() {
   }
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

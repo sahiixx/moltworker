@@ -1,15 +1,3 @@
-import { describe, it, expect } from 'vitest';
-import { spawn } from 'child_process';
-import path from 'path';
-
-const scriptPath = path.join(process.cwd(), 'skills/code-runner/scripts/eval.js');
-
-describe('eval.js', () => {
-  function runScript(args) {
-    return new Promise((resolve) => {
-      const proc = spawn('node', [scriptPath, ...args], {
-        timeout: 5000
-      });
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'child_process';
 
@@ -34,7 +22,7 @@ describe('eval.js', () => {
       });
 
       proc.on('close', (exitCode) => {
-        resolve({ exitCode, stdout, stderr });
+        resolve({ exitCode, code: exitCode, stdout, stderr });
       });
     });
   }
@@ -257,15 +245,7 @@ describe('eval.js', () => {
 
       expect(result.exitCode).toBe(1);
     });
-      proc.on('close', (code) => {
-        resolve({ code, stdout, stderr });
-      });
-
-      proc.on('error', (err) => {
-        reject(err);
-      });
-    });
-  };
+  });
 
   it('shows usage when no expression is provided', async () => {
     const result = await runScript([]);

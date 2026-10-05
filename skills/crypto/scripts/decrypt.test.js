@@ -1,22 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { spawn } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-
-const scriptPath = path.join(process.cwd(), 'skills/crypto/scripts/decrypt.js');
-const encryptPath = path.join(process.cwd(), 'skills/crypto/scripts/encrypt.js');
-
-describe('decrypt.js', () => {
-  function runScript(script, args) {
-    return new Promise((resolve) => {
-      const proc = spawn('node', [script, ...args], {
-        timeout: 5000
-      });
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'child_process';
+import fs from 'fs';
 import { writeFileSync, unlinkSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+
+const scriptPath = join(process.cwd(), 'skills/crypto/scripts/decrypt.js');
+const encryptPath = join(process.cwd(), 'skills/crypto/scripts/encrypt.js');
 
 describe('decrypt.js', () => {
   let tempFiles = [];
@@ -35,9 +25,9 @@ describe('decrypt.js', () => {
     vi.restoreAllMocks();
   });
 
-  const runEncryptScript = (args) => {
+  const runScript = (script, args) => {
     return new Promise((resolve, reject) => {
-      const proc = spawn('node', ['skills/crypto/scripts/encrypt.js', ...args]);
+      const proc = spawn('node', [script, ...args]);
 
       let stdout = '';
       let stderr = '';
@@ -51,10 +41,12 @@ describe('decrypt.js', () => {
       });
 
       proc.on('close', (exitCode) => {
-        resolve({ exitCode, stdout, stderr });
+        resolve({ exitCode, code: exitCode, stdout, stderr });
       });
     });
   }
+
+  const runEncryptScript = (args) => runScript(encryptPath, args);
 
   async function encrypt(plaintext, password) {
     const result = await runScript(encryptPath, [plaintext, '--password', password]);
@@ -302,15 +294,7 @@ describe('decrypt.js', () => {
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('Decryption failed');
     });
-      proc.on('close', (code) => {
-        resolve({ code, stdout, stderr });
-      });
-
-      proc.on('error', (err) => {
-        reject(err);
-      });
-    });
-  };
+  });
 
   const runDecryptScript = (args) => {
     return new Promise((resolve, reject) => {
@@ -482,21 +466,10 @@ describe('decrypt.js', () => {
     expect(error.error).toBeTruthy();
   });
 
-  it('decrypts empty string', async () => {
-    const plaintext = '';
-    const password = 'password';
-
-    // Encrypt
-    const encryptResult = await runEncryptScript([plaintext, '--password', password]);
-    expect(encryptResult.code).toBe(0);
-    const encrypted = encryptResult.stdout.trim();
-
-    // Decrypt
-    const decryptResult = await runDecryptScript([encrypted, '--password', password]);
-    expect(decryptResult.code).toBe(0);
-
-    const output = JSON.parse(decryptResult.stdout);
-    expect(output.plaintext).toBe(plaintext);
+  it('rejects empty encrypted input with usage instead of attempting decryption', async () => {
+    const result = await runDecryptScript(['', '--password', 'password']);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('Usage: node decrypt.js');
   });
 
   it('decrypts long text', async () => {

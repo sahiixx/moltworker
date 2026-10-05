@@ -5,10 +5,9 @@
  * Usage: node vision.js <image> <prompt> [OPTIONS]
  */
 
-const fs = require('fs');
-const path = require('path');
-
-const args = process.argv.slice(2);
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Parse CLI arguments into image, prompt, model, and detail options.
@@ -20,6 +19,7 @@ const args = process.argv.slice(2);
  *  - detail: the value following `--detail` or the default "auto".
  */
 function parseArgs() {
+  const args = process.argv.slice(2);
   const result = {
     image: '',
     prompt: '',
@@ -151,7 +151,7 @@ async function analyzeWithClaude(imageData, prompt, model) {
  *
  * On success prints the analysis JSON to stdout. If required arguments are missing or an error occurs, prints an error object to stderr and exits with code 1.
  */
-async function main() {
+export async function main() {
   const options = parseArgs();
 
   if (!options.image) {
@@ -176,4 +176,6 @@ async function main() {
   }
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

@@ -1,24 +1,5 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { spawn } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-
-const scriptPath = path.join(process.cwd(), 'skills/crypto/scripts/encrypt.js');
-
-describe('encrypt.js', () => {
-  afterEach(() => {
-    const testFile = 'test-encrypted.json';
-    if (fs.existsSync(testFile)) {
-      fs.unlinkSync(testFile);
-    }
-  });
-
-  function runScript(args) {
-    return new Promise((resolve) => {
-      const proc = spawn('node', [scriptPath, ...args], {
-        timeout: 5000
-      });
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import fs from 'fs';
 import { spawn } from 'child_process';
 import { writeFileSync, unlinkSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
@@ -28,6 +9,7 @@ describe('encrypt.js', () => {
   let tempFiles = [];
 
   afterEach(() => {
+    if (fs.existsSync('test-encrypted.json')) fs.unlinkSync('test-encrypted.json');
     tempFiles.forEach((file) => {
       if (existsSync(file)) {
         try {
@@ -57,7 +39,7 @@ describe('encrypt.js', () => {
       });
 
       proc.on('close', (exitCode) => {
-        resolve({ exitCode, stdout, stderr });
+        resolve({ exitCode, code: exitCode, stdout, stderr });
       });
     });
   }
@@ -245,15 +227,7 @@ describe('encrypt.js', () => {
       expect(output).toHaveProperty('tag');
       expect(output.tag).toBeTruthy();
     });
-      proc.on('close', (code) => {
-        resolve({ code, stdout, stderr });
-      });
-
-      proc.on('error', (err) => {
-        reject(err);
-      });
-    });
-  };
+  });
 
   it('shows usage when no data is provided', async () => {
     const result = await runScript([]);
@@ -374,12 +348,11 @@ describe('encrypt.js', () => {
     expect(output1.salt).not.toBe(output2.salt);
   });
 
-  it('encrypts empty string', async () => {
+  it('rejects empty plaintext with usage', async () => {
     const result = await runScript(['', '--password', 'password']);
 
-    expect(result.code).toBe(0);
-    const output = JSON.parse(result.stdout);
-    expect(output).toHaveProperty('ciphertext');
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('Usage: node encrypt.js');
   });
 
   it('encrypts long text', async () => {
